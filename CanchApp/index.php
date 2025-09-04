@@ -7,6 +7,7 @@ $reservarmsj = ''; //Se inicia la variable.
 $valoracionmsj= '';
 $ver='';
 $pedir="";
+$calendario='';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') { //Esto hace q el login sea necesario unicamente cuando se activa algun boton o le pedis algo al servidor, si chusmeas no pasa nada.
     if (!$rol) {
@@ -16,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') { //Esto hace q el login sea necesari
     } 
     
     if (isset($_POST['reservar'])) {
-        $reservarmsj = "¡Reserva realizada con éxito!";
+        $calendario = "redirigir";
     } elseif (isset($_POST['valorar'])) { //Adentro va el nombre del boton, entonces sería, si vos apretas el boton de reservar, te manda un mensaje y en este caso cada uno tiene color.
         $valoracionmsj = "¡Valoración enviada!";
     }
@@ -51,14 +52,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') { //Esto hace q el login sea necesari
 
 
 <!--Acá va el mensaje cuando reservas ponele-->
-<?php if ($reservarmsj) echo "<p style='color:green;'>$reservarmsj</p>"; ?>
 <?php if ($valoracionmsj) echo "<p style='color:yellow;'>$valoracionmsj</p>"; ?>
 <?php if ($ver) header("Location: cancha.php")?>
 <?php if ($pedir) header("Location: peticion.php")?>
+<?php if ($calendario) header("Location: calendario.php")?>
 
 <!--visible para todos-->
 <form method="post">
-    <button type="submit" name="reservar">Reservar cancha</button>
+    <button type="submit" name="reservar">Calendario de Reservas</button>
     <button type="submit" name="valorar">Valorar cancha</button>
     <button type="submit" name="ver">Ver canchas!</button>
     <button type="submit" name="pedir">Pedir ser Dueño!</button>
@@ -70,8 +71,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') { //Esto hace q el login sea necesari
 <!-- Este if, cerrado con endif permite que si y unicamente si el usuario está logueado y tiene rol de dueño pueda ver ese mensaje.-->
 <h2>Opciones de dueño</h2>
 <ul>
-    <li><a href="">Mis canchas</a></li>
+    <li><a href="cancha.php">Mis canchas</a></li>
     <li><a href="dueño.php">Agregar nueva cancha</a></li>
+    <li><a href="gestion_reservas.php">Ver reservas de mis canchas</a></li>
 </ul>
 <?php endif; ?>
 </body>

@@ -23,6 +23,7 @@ try {
     
     if (!empty($filtro_nombre)) {
         $sql .= " AND (nombre LIKE ? OR lugar LIKE ?)";
+        // El % funciona para encontrar coincidiencias en la busqueda. ej: si busco "centro" me trae "Centro Deportivo" y otros resultados similares a eso
         $params[] = "%{$filtro_nombre}%";
         $params[] = "%{$filtro_nombre}%";
     }
@@ -348,58 +349,6 @@ $horarios = generarHorarios();
                     <?php endif; ?>
                 </div>
             <?php endif; ?>
-        </div>
-        
-        <!-- TAB 2: Reserva Personalizada -->
-        <div id="tab-personalizada" class="tab-content">
-            <div class="form-personalizada">
-                <h2>Reserva Personalizada</h2>
-                <form method="post">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 15px;">
-                        <div class="form-group">
-                            <label for="id_cancha">Cancha:</label>
-                            <select name="id_cancha" id="id_cancha" required>
-                                <option value="">Seleccionar cancha</option>
-                                <?php foreach ($canchas as $cancha): ?>
-                                    <option value="<?= $cancha['id_cancha'] ?>">
-                                        <?= htmlspecialchars($cancha['nombre']) ?> - <?= htmlspecialchars($cancha['lugar']) ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="fecha">Fecha:</label>
-                            <input type="date" name="fecha" id="fecha" required min="<?= date('Y-m-d') ?>">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="hora_inicio">Hora inicio:</label>
-                            <select name="hora_inicio" id="hora_inicio" required>
-                                <option value="">Seleccionar hora</option>
-                                <?php foreach ($horarios as $horario): ?>
-                                    <option value="<?= $horario ?>"><?= $horario ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="hora_final">Hora final:</label>
-                            <select name="hora_final" id="hora_final" required>
-                                <option value="">Seleccionar hora</option>
-                                <?php 
-                                for ($h = 9; $h <= 23; $h++) {
-                                    $hora_fin = sprintf("%02d:00", $h);
-                                    echo "<option value='{$hora_fin}'>{$hora_fin}</option>";
-                                }
-                                ?>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <button type="submit" name="reservar_personalizada" class="btn btn-success">🎯 Reservar Personalizada</button>
-                </form>
-            </div>
         </div>
     </div>
     

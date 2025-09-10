@@ -182,10 +182,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['accion'] === 'editar') { //
     <?php if ($rol === 'duenio'): ?>
         <h2>Mis canchas</h2>
 
-        <?php if (isset($msgError[$cancha['id_cancha']])): ?> <!--MENSAJE Q APARECE ARRIBA AL EDITAR CANCHA, YA SEA POSITIVO O NEGATIVO.-->
-                        <p style="color:red;"><?= $msgError[$cancha['id_cancha']] ?></p>    
-                        <?php endif; ?>
-
                         <?php if (!empty($_SESSION['msgOk'])): ?>
                         <p style="color:green;"><?= $_SESSION['msgOk'] ?></p>
                         <?php unset($_SESSION['msgOk']); ?>
@@ -198,6 +194,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['accion'] === 'editar') { //
             <ul>
                 <?php foreach ($misCanchas as $cancha): ?>
                     <li>
+                        <?php if (isset($msgError[$cancha['id_cancha']])): ?> <!--ESTE ERROR VA EN EL LOOP YA QUE AFUERA DA ERROR!-->
+                        <p style="color:red;"><?= $msgError[$cancha['id_cancha']] ?></p>
+                    <?php endif; ?>
+
                         <strong><?= htmlspecialchars($cancha['nombre']) ?></strong>
                         - Ubicación: <?= htmlspecialchars($cancha['lugar']) ?>
                         - Descripción: <?= htmlspecialchars($cancha['bio']) ?>

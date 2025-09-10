@@ -102,6 +102,10 @@ for ($hora = 9; $hora <= 21; $hora++) {
         </div>
     </div>
 
+
+
+
+    <!--RESERVAS-------------------------------------------------------------------------------------------->
     <h2>Horarios Disponibles - Hoy</h2>
     <div class="horarios">
         <?php foreach ($horarios as $slot): ?>

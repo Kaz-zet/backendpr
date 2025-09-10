@@ -36,7 +36,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             $extension = pathinfo($_FILES['foto']['name'], PATHINFO_EXTENSION);
             $filename = 'cancha_' . time() . '_' . rand(1000, 9999) . '.' . $extension;
-            $uploadPath = 'Seguridad/' . $filename;
+            $uploadPath = 'uploads/' . $filename;
+            
             
             if (move_uploaded_file($_FILES['foto']['tmp_name'], $uploadPath)) {
                 $foto = $filename; // This should now work
@@ -118,7 +119,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </script>
     <?php endif; ?>
 
-    <form method="post">
+    <form method="post" enctype="multipart/form-data">
         <input type="text" name="nombre" placeholder="Nombre" required><br>
         <input type="text" name="lugar" placeholder="Dirección" required><br>
         <input type="text" name="bio" placeholder="Biografía" required><br>

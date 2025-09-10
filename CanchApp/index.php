@@ -7,6 +7,7 @@ $reservarmsj = ''; //Se inicia la variable.
 $valoracionmsj= '';
 $ver='';
 $pedir="";
+$calendario="";
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') { //Esto hace q el login sea necesario unicamente cuando se activa algun boton o le pedis algo al servidor, si chusmeas no pasa nada.
     if (!$rol) {
@@ -25,6 +26,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') { //Esto hace q el login sea necesari
     }
     elseif (isset($_POST['pedir'])) { //Adentro va el nombre del boton, entonces sería, si vos apretas el boton de reservar, te manda un mensaje y en este caso cada uno tiene color.
         $pedir = "¡!";
+    }
+    elseif (isset($_POST['calendario'])) { //Adentro va el nombre del boton, entonces sería, si vos apretas el boton de reservar, te manda un mensaje y en este caso cada uno tiene color.
+        $calendario = "¡!";
     }
     
 }
@@ -55,6 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') { //Esto hace q el login sea necesari
 <?php if ($valoracionmsj) echo "<p style='color:yellow;'>$valoracionmsj</p>"; ?>
 <?php if ($ver) header("Location: cancha.php")?>
 <?php if ($pedir) header("Location: peticion.php")?>
+<?php if ($calendario) header("Location: calendario.php")?>
 
 <!--visible para todos-->
 <form method="post">
@@ -62,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') { //Esto hace q el login sea necesari
     <button type="submit" name="valorar">Valorar cancha</button>
     <button type="submit" name="ver">Ver canchas!</button>
     <button type="submit" name="pedir">Pedir ser Dueño!</button>
-    
+    <button type="submit" name="calendario">Ver calendario de reservas</button>
 </form>
 
 
@@ -72,6 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') { //Esto hace q el login sea necesari
 <ul>
     <li><a href="">Mis canchas</a></li>
     <li><a href="dueño.php">Agregar nueva cancha</a></li>
+    <li><a href="gestion_reservas.php">Gestionar mis reservas</a></li>
 </ul>
 <?php endif; ?>
 </body>

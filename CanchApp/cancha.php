@@ -6,34 +6,78 @@ $rol = $_SESSION['rol'] ?? null;
 $idduenio = $_SESSION['id'] ?? null; //Creo variable para sacar la ID
 
 $id_usuario = $_SESSION['id'] ?? null;
-$misFavoritos = [];
 
 //PARA EDITAR CANCHA!!
 
 $msgError = [];
 $msgOk = [];
 
-//PRUEBA PARA AGREGAR A FAVORITOSS LA CANCHA
+//AGREGAR A FAVORITOSS LA CANCHA--------------------------------------------------------------------
 
-if ($id_usuario) { //F. C. reprensenta a tabla, favoritos y cancha.
+$misFavoritos = [];
+$favoritosIds = []; //Le ponemos ID asi se storea mas fácil.
+
+if ($id_usuario) {
     $stmt = $pdo->prepare("
-        SELECT c.*
+        SELECT c.*, f.id_favorito
         FROM cancha c
         INNER JOIN favoritos f ON c.id_cancha = f.id_cancha 
         WHERE f.id_usuario = ?
     ");
     $stmt->execute([$id_usuario]);
     $misFavoritos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    //Crea un array de las canchas favoritas para que sea mas lindo a la vista
+    $favoritosIds = array_column($misFavoritos, 'id_cancha');
+}
+
+//Saca o pone en favoritos.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['accion'] === 'toggle_favorito') {
+    if (!$id_usuario) {
+        header("Location: login.php");
+        exit;
+    }
+    
+    $id_cancha = $_POST['id_cancha'];
+    
+    try {
+        //SI YA ESTÁ EN FAVORITOS
+        $stmt = $pdo->prepare("SELECT id_favorito FROM favoritos WHERE id_usuario = ? AND id_cancha = ?");
+        $stmt->execute([$id_usuario, $id_cancha]);
+        $existe = $stmt->fetch(); //creamos la variable "existe" en la busqueda de canchas, por ende revisa si esa cancha existe en favoritos, si si, te deja eliminarla, si no, se añadae.
+        
+        if ($existe) {
+            //SACAR DE FAVORITOS
+            $stmt = $pdo->prepare("DELETE FROM favoritos WHERE id_usuario = ? AND id_cancha = ?");
+            $stmt->execute([$id_usuario, $id_cancha]);
+            $msg = "Cancha removida de favoritos";
+        } else {
+            //AÑADIR A FAVORITOS
+            $stmt = $pdo->prepare("INSERT INTO favoritos (id_usuario, id_cancha) VALUES (?, ?)");
+            $stmt->execute([$id_usuario, $id_cancha]);
+            $msg = "Cancha agregada a favoritos";
+        }
+        
+        //se restartea la pagina asi se ven los nuevos cambios.
+        header("Location: " . $_SERVER['PHP_SELF']);
+        exit;
+        
+    } catch (Exception $e) {
+        $msg = "Error: " . $e->getMessage();
+    }
 }
 
 //-----------------------------------------------------------------------
+
+//EDITAR CANCHAS!!
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['accion'] === 'editar') { //Utilizo el mismo filtro que al crear cancha pero en este caso saco su Id, y remplazo los datos utilizando esa ID.
     $id = $_POST['id_cancha'];
     $nombre = trim($_POST['nombre']);
     $lugar  = trim($_POST['lugar']);
+    $bio  = trim($_POST['bio']);
 
-    if ($nombre === '' || $lugar === '') {
+    if ($nombre === '' || $lugar === '' || $bio === '') {
         $msgError[$id] = "Completa todos los campos.";
     } else {
         try {
@@ -43,8 +87,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['accion'] === 'editar') { //
             if ($stmt->fetch()) {
                 $msgError[$id] = "Ya existe otra cancha con ese nombre.";
             } else {
-                $stmt = $pdo->prepare("UPDATE cancha SET nombre = ?, lugar = ? WHERE id_cancha = ?");
-                $stmt->execute([$nombre, $lugar, $id]);
+                $stmt = $pdo->prepare("UPDATE cancha SET nombre = ?, lugar = ?, bio = ? WHERE id_cancha = ?");
+                $stmt->execute([$nombre, $lugar, $bio, $id]);
                 $msgOk[$id] = "Cancha editada correctamente.";
 
                 $_SESSION['msgOk'] = "Cancha editada correctamente.";
@@ -56,6 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['accion'] === 'editar') { //
         }
     }
 }
+//-------------------------------------------------------------------------------------------
 
 
     try {
@@ -85,7 +130,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['accion'] === 'editar') { //
     <h1>Mis Favoritos</h1>
     <ul>
         <?php foreach ($misFavoritos as $cancha): ?>
-            <li><?= htmlspecialchars($cancha['nombre']) ?> - <?= htmlspecialchars($cancha['lugar']) ?></li>
+            <li><?= htmlspecialchars($cancha['nombre']) ?> - <?= htmlspecialchars($cancha['lugar']) ?> - <?= htmlspecialchars($cancha['bio']) ?> <a href="detalle_cancha.php?id=<?= $cancha['id_cancha'] ?>" 
+                    style="background: #000000ff; color: white; padding: 5px 10px; text-decoration: none; border-radius: 3px;">
+                    Ver Detalles
+                    </a>
+                    <form method="post" style="display:inline;">
+                        <input type="hidden" name="id_cancha" value="<?= $cancha['id_cancha'] ?>">
+                        <button type="submit" name="accion" value="toggle_favorito">
+                            <?= in_array($cancha['id_cancha'], $favoritosIds) ? '⭐' : '☆' ?>
+                        </button>
+                    </form></li>
+    
+
         <?php endforeach; ?>
     </ul>
 <?php endif; ?> 
@@ -96,15 +152,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['accion'] === 'editar') { //
                 <li>
                     <strong><?php echo htmlspecialchars($cancha['nombre']); ?></strong>  <!--Muestra las variables q queremos-->
                     - Ubicación: <?php echo htmlspecialchars($cancha['lugar']); ?>
+                     - Descipcion: <?php echo htmlspecialchars($cancha['bio']); ?>
+                    <a href="detalle_cancha.php?id=<?= $cancha['id_cancha'] ?>" 
+                    style="background: #000000ff; color: white; padding: 5px 10px; text-decoration: none; border-radius: 3px;">
+                        Ver Detalles
+                    </a>
 
 
 
-            <!--PARA AGREGAR FAV CANCHAS (NO ANDA)-->
+            <!--PARA AGREGAR FAV CANCHAS (EL CODE ESTÁ EN ESTE PHP, MIS FAVORTIOS.PHP NO ANDA)-->
+            
 
                     <form method="post" style="display:inline;">
                         <input type="hidden" name="id_cancha" value="<?= $cancha['id_cancha'] ?>">
                         <button type="submit" name="accion" value="toggle_favorito">
-                            <?= in_array($cancha['id_cancha'], array_column($misFavoritos, 'id_cancha')) ? '💜' : '♡' ?>
+                            <?= in_array($cancha['id_cancha'], $favoritosIds) ? '⭐' : '☆' ?>
                         </button>
                     </form>
 
@@ -121,7 +183,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['accion'] === 'editar') { //
         <h2>Mis canchas</h2>
 
         <?php if (isset($msgError[$cancha['id_cancha']])): ?> <!--MENSAJE Q APARECE ARRIBA AL EDITAR CANCHA, YA SEA POSITIVO O NEGATIVO.-->
-                        <p style="color:red;"><?= $msgError[$cancha['id_cancha']] ?></p>
+                        <p style="color:red;"><?= $msgError[$cancha['id_cancha']] ?></p>    
                         <?php endif; ?>
 
                         <?php if (!empty($_SESSION['msgOk'])): ?>
@@ -138,6 +200,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['accion'] === 'editar') { //
                     <li>
                         <strong><?= htmlspecialchars($cancha['nombre']) ?></strong>
                         - Ubicación: <?= htmlspecialchars($cancha['lugar']) ?>
+                        - Descripción: <?= htmlspecialchars($cancha['bio']) ?>
+                        <?php if ($cancha['foto']): ?>
+                            <br><img src="uploads/<?= htmlspecialchars($cancha['foto']) ?>" width="100" height="60">
+                        <?php endif; ?>
 
                         
 
@@ -145,7 +211,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['accion'] === 'editar') { //
                         <button onclick="abrirModal(
                         '<?= $cancha['id_cancha'] ?>',
                         '<?= htmlspecialchars($cancha['nombre']) ?>',
-                        '<?= htmlspecialchars($cancha['lugar']) ?>'
+                        '<?= htmlspecialchars($cancha['lugar']) ?>',
+                        '<?= htmlspecialchars($cancha['bio']) ?>'
                         )">Editar</button>
 
                         <!--POPUP PARA EDITAR CANCHA-->
@@ -156,6 +223,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['accion'] === 'editar') { //
                             <input type="hidden" name="id_cancha" id="edit_id">
                             <input type="text" name="nombre" id="edit_nombre" required><br><br>
                             <input type="text" name="lugar" id="edit_lugar" required><br><br>
+                            <input type="text" name="bio" id="edit_bio" required><br><br>
                             <button type="submit" name="accion" value="editar">Guardar</button>
                             <button type="button" onclick="cerrarModal()">Cancelar</button>
                             </form>
@@ -165,11 +233,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['accion'] === 'editar') { //
 
                         <!--SCRIPT PARA EL POPUP-->
                         <script>
-                        function abrirModal(id, nombre, lugar) {
+                        function abrirModal(id, nombre, lugar, bio) {
                         document.getElementById('modalEditar').style.display = 'block';
                         document.getElementById('edit_id').value = id;
                         document.getElementById('edit_nombre').value = nombre;
                         document.getElementById('edit_lugar').value = lugar;
+                        document.getElementById('edit_bio').value = bio;
                         }
                         function cerrarModal() {
                         document.getElementById('modalEditar').style.display = 'none';

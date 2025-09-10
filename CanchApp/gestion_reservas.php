@@ -14,13 +14,13 @@ $error = '';
 try {
     $stmt = $pdo->prepare("SELECT * FROM cancha WHERE id_duenio = ? ORDER BY nombre");
     $stmt->execute([$id_duenio]);
-    $misCanchas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $miscanchas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     $error = "Error al cargar canchas: " . $e->getMessage();
-    $misCanchas = [];
+    $miscanchas = [];
 }
 
-// Procesar cancelación de reserva
+// cancelar la reserva
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cancelar_reserva'])) {
     $id_reserva = $_POST['id_reserva'] ?? '';
     
@@ -49,7 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cancelar_reserva'])) 
 }
 
 // Obtener todas las reservas de las canchas del dueño
-function obtenerReservasDuenio($pdo, $id_duenio, $fecha_desde = null) {
+function obtenerreservasduenio($pdo, $id_duenio, $fecha_desde = null) {
     $fecha_desde = $fecha_desde ?: date('Y-m-d');
     
     $stmt = $pdo->prepare("
@@ -73,7 +73,7 @@ function obtenerReservasDuenio($pdo, $id_duenio, $fecha_desde = null) {
 }
 
 // Obtener estadísticas
-function obtenerEstadisticas($pdo, $id_duenio) {
+function obtenerestadisticas($pdo, $id_duenio) {
     // Total de reservas este mes
     $stmt = $pdo->prepare("
         SELECT COUNT(*) as total_mes
@@ -114,8 +114,8 @@ function obtenerEstadisticas($pdo, $id_duenio) {
     ];
 }
 
-$reservas = obtenerReservasDuenio($pdo, $id_duenio, $_GET['desde'] ?? null);
-$estadisticas = obtenerEstadisticas($pdo, $id_duenio);
+$reservas = obtenerreservasduenio($pdo, $id_duenio, $_GET['desde'] ?? null);
+$estadisticas = obtenerestadisticas($pdo, $id_duenio);
 ?>
 
 <!DOCTYPE html>
@@ -153,7 +153,7 @@ $estadisticas = obtenerEstadisticas($pdo, $id_duenio);
                 <div class="stat-label">Este mes</div>
             </div>
             <div class="stat-card">
-                <div class="stat-number"><?= count($misCanchas) ?></div>
+                <div class="stat-number"><?= count($miscanchas) ?></div>
                 <div class="stat-label">Mis canchas</div>
             </div>
         </div>
@@ -219,7 +219,7 @@ $estadisticas = obtenerEstadisticas($pdo, $id_duenio);
                             </td>
                             <td>
                                 <strong><?= htmlspecialchars($reserva['cancha_nombre']) ?></strong><br>
-                                <small class="cancha-info">📍 <?= htmlspecialchars($reserva['cancha_lugar']) ?></small>
+                                <small class="cancha-info"><?= htmlspecialchars($reserva['cancha_lugar']) ?></small>
                             </td>
                             <td>
                                 <strong><?= htmlspecialchars($reserva['usuario_nombre']) ?></strong><br>
@@ -233,7 +233,7 @@ $estadisticas = obtenerEstadisticas($pdo, $id_duenio);
                                       onsubmit="return confirm('¿Seguro que quieres cancelar esta reserva?');">
                                     <input type="hidden" name="id_reserva" value="<?= $reserva['id_reserva'] ?>">
                                     <button type="submit" name="cancelar_reserva" class="btn btn-danger">
-                                        ❌ Cancelar
+                                        Cancelar
                                     </button>
                                 </form>
                             </td>
@@ -243,23 +243,23 @@ $estadisticas = obtenerEstadisticas($pdo, $id_duenio);
             </table>
         <?php else: ?>
             <div class="no-reservas">
-                <h3>📅 No hay reservas</h3>
+                <h3>No hay reservas</h3>
                 <p>No tienes reservas <?= isset($_GET['desde']) ? 'desde la fecha seleccionada' : 'próximas' ?>.</p>
-                <?php if (empty($misCanchas)): ?>
+                <?php if (empty($miscanchas)): ?>
                     <p><strong>Tip:</strong> <a href="dueño.php">Crea tu primera cancha</a> para empezar a recibir reservas.</p>
                 <?php endif; ?>
             </div>
         <?php endif; ?>
         
         <!-- Resumen de canchas -->
-        <?php if (!empty($misCanchas)): ?>
+        <?php if (!empty($miscanchas)): ?>
             <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
-                <h3>🏟️ Mis canchas (<?= count($misCanchas) ?>)</h3>
+                <h3>Mis canchas (<?= count($miscanchas) ?>)</h3>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px;">
-                    <?php foreach ($misCanchas as $cancha): ?>
+                    <?php foreach ($miscanchas as $cancha): ?>
                         <div style="background: white; padding: 15px; border-radius: 5px; border-left: 4px solid #007bff;">
                             <strong><?= htmlspecialchars($cancha['nombre']) ?></strong><br>
-                            <small>📍 <?= htmlspecialchars($cancha['lugar']) ?></small>
+                            <small><?= htmlspecialchars($cancha['lugar']) ?></small>
                         </div>
                     <?php endforeach; ?>
                 </div>

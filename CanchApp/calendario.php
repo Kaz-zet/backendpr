@@ -13,19 +13,19 @@ $error = '';
 // Fecha para mostrar (por defecto hoy)
 $fecha_mostrar = $_GET['fecha'] ?? date('Y-m-d');
 
-// Filtro de búsqueda
-$filtro_nombre = $_GET['buscar'] ?? '';
+// buscar una cancha por nombre o lugar
+$buscar = $_GET['buscar'] ?? '';
 
-// Obtener todas las canchas disponibles con filtro opcional
+// Obtener todas las canchas disponibles con la busqueda hecha
 try {
     $sql = "SELECT * FROM cancha WHERE (verificado = 1 OR verificado = 0)";
     $params = [];
     
-    if (!empty($filtro_nombre)) {
+    if (!empty($buscar)) {
         $sql .= " AND (nombre LIKE ? OR lugar LIKE ?)";
         // El % funciona para encontrar coincidiencias en la busqueda. ej: si busco "centro" me trae "Centro Deportivo" y otros resultados similares a eso
-        $params[] = "%{$filtro_nombre}%";
-        $params[] = "%{$filtro_nombre}%";
+        $params[] = "%{$buscar}%";
+        $params[] = "%{$buscar}%";
     }
     
     $sql .= " ORDER BY nombre";
@@ -50,10 +50,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reserva_rapida'])) {
         // Calcular hora final automáticamente (1 hora después)
         $hora_final = date('H:i', strtotime($hora_inicio . ' +1 hour'));
         
-        // Validar que la fecha no sea en el pasado
+        // Valida que la fecha no este atrasada, 
         $fecha_actual = date('Y-m-d');
         if ($fecha < $fecha_actual) {
-            $error = "No puedes reservar en fechas pasadas.";
+            $error = "No puedes reservar en fechas ya pasadas.";
         } else {
             try {
                 // Verificar si ya existe una reserva en ese horario
@@ -88,70 +88,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reserva_rapida'])) {
                     
                     $msg = "¡Reserva realizada! 🎉<br>
                            <strong>{$nombre_cancha}</strong><br>
-                           📅 " . date('d/m/Y', strtotime($fecha)) . "<br>
-                           ⏰ {$hora_inicio} - {$hora_final}";
-                }
-            } catch (PDOException $e) {
-                $error = "Error al procesar la reserva: " . $e->getMessage();
-            }
-        }
-    }
-}
-
-// Procesar reserva PERSONALIZADA (formulario tradicional)
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reservar_personalizada'])) {
-    $id_cancha = $_POST['id_cancha'] ?? '';
-    $fecha = $_POST['fecha'] ?? '';
-    $hora_inicio = $_POST['hora_inicio'] ?? '';
-    $hora_final = $_POST['hora_final'] ?? '';
-    
-    if (empty($id_cancha) || empty($fecha) || empty($hora_inicio) || empty($hora_final)) {
-        $error = "Todos los campos son obligatorios.";
-    } else {
-        // Validar que la fecha no sea en el pasado
-        $fecha_actual = date('Y-m-d');
-        if ($fecha < $fecha_actual) {
-            $error = "No puedes reservar en fechas pasadas.";
-        } elseif ($hora_inicio >= $hora_final) {
-            $error = "La hora de inicio debe ser menor que la hora final.";
-        } else {
-            try {
-                // Verificar si ya existe una reserva en ese horario
-                $stmt = $pdo->prepare("
-                    SELECT COUNT(*) FROM reserva 
-                    WHERE id_cancha = ? AND fecha = ? 
-                    AND ((hora_inicio <= ? AND hora_final > ?) 
-                    OR (hora_inicio < ? AND hora_final >= ?)
-                    OR (hora_inicio >= ? AND hora_final <= ?))
-                ");
-                $stmt->execute([
-                    $id_cancha, $fecha, 
-                    $hora_inicio, $hora_inicio,
-                    $hora_final, $hora_final,
-                    $hora_inicio, $hora_final
-                ]);
-                
-                if ($stmt->fetchColumn() > 0) {
-                    $error = "Ya existe una reserva en ese horario.";
-                } else {
-                    // Crear la reserva
-                    $stmt = $pdo->prepare("
-                        INSERT INTO reserva (fecha, hora_inicio, hora_final, id_usuario, id_cancha) 
-                        VALUES (?, ?, ?, ?, ?)
-                    ");
-                    $stmt->execute([$fecha, $hora_inicio, $hora_final, $id_usuario, $id_cancha]);
-                    
-                    // Obtener nombre de la cancha para el mensaje
-                    $stmt = $pdo->prepare("SELECT nombre FROM cancha WHERE id_cancha = ?");
-                    $stmt->execute([$id_cancha]);
-                    $nombre_cancha = $stmt->fetchColumn();
-                    
-                    $duracion = (strtotime($hora_final) - strtotime($hora_inicio)) / 3600;
-                    
-                    $msg = "¡Reserva personalizada realizada! 🎯<br>
-                           <strong>{$nombre_cancha}</strong><br>
-                           📅 " . date('d/m/Y', strtotime($fecha)) . "<br>
-                           ⏰ {$hora_inicio} - {$hora_final} ({$duracion}h)";
+                            " . date('d/m/Y', strtotime($fecha)) . "<br>
+                            {$hora_inicio} - {$hora_final}";
                 }
             } catch (PDOException $e) {
                 $error = "Error al procesar la reserva: " . $e->getMessage();
@@ -161,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reservar_personalizad
 }
 
 // Función para obtener reservas de una cancha en una fecha específica
-function obtenerReservas($pdo, $id_cancha, $fecha) {
+function obtenerreservas($pdo, $id_cancha, $fecha) {
     $stmt = $pdo->prepare("
         SELECT r.*, u.nombre as usuario_nombre 
         FROM reserva r 
@@ -174,7 +112,7 @@ function obtenerReservas($pdo, $id_cancha, $fecha) {
 }
 
 // Generar horarios disponibles
-function generarHorarios() {
+function generarhorarios() {
     $horarios = [];
     for ($h = 8; $h <= 22; $h++) {
         $horarios[] = sprintf("%02d:00", $h);
@@ -183,7 +121,7 @@ function generarHorarios() {
 }
 
 // Verificar si un horario está ocupado
-function estaOcupado($reservas, $hora) {
+function estaocupado($reservas, $hora) {
     $hora_fin = date('H:i', strtotime($hora . ' +1 hour'));
     
     foreach ($reservas as $reserva) {
@@ -197,7 +135,7 @@ function estaOcupado($reservas, $hora) {
     return false;
 }
 
-$horarios = generarHorarios();
+$horarios = generarhorarios();
 ?>
 
 <!DOCTYPE html>
@@ -210,8 +148,6 @@ $horarios = generarHorarios();
 </head>
 <body>
     <div class="container">
-        <h1>⚡ Reservas Súper Rápidas</h1>
-        
         <?php if (!empty($msg)): ?>
             <div class="mensaje success"><?= $msg ?></div>
         <?php endif; ?>
@@ -220,44 +156,31 @@ $horarios = generarHorarios();
             <div class="mensaje error"><?= htmlspecialchars($error) ?></div>
         <?php endif; ?>
         
-        <!-- Filtro de búsqueda -->
-        <div class="filtro-busqueda">
+        <!-- Busqueda -->
+        <div class="busqueda">
             <h3>Buscar Canchas</h3>
             <form method="get" class="search-container">
-                <input type="text" 
-                       name="buscar" 
-                       class="search-input"
-                       placeholder="Buscar por nombre de cancha o ubicación..." 
-                       value="<?= htmlspecialchars($filtro_nombre) ?>"
-                       id="busqueda">
-                
+                <input type="text" name="buscar" class="search-input" placeholder="Buscar por nombre de cancha o ubicación..." value="<?= htmlspecialchars($buscar) ?>" id="busqueda">
                 <!-- Mantener la fecha actual en el filtro -->
                 <input type="hidden" name="fecha" value="<?= $fecha_mostrar ?>">
                 
                 <button type="submit" class="btn-buscar">Buscar</button>
                 
-                <?php if (!empty($filtro_nombre)): ?>
+                <?php if (!empty($buscar)): ?>
                     <a href="?fecha=<?= $fecha_mostrar ?>" class="btn-limpiar">Limpiar</a>
                 <?php endif; ?>
             </form>
             
-            <div class="resultados-info">
-                <?php if (!empty($filtro_nombre)): ?>
-                    Mostrando resultados para: "<strong><?= htmlspecialchars($filtro_nombre) ?></strong>" 
+            <div class="resultados">
+                <?php if (!empty($buscar)): ?>
+                    Mostrando resultados para: "<strong><?= htmlspecialchars($buscar) ?></strong>" 
                     - <?= count($canchas) ?> cancha(s) encontrada(s)
                 <?php else: ?>
                     Mostrando todas las canchas (<?= count($canchas) ?> total)
                 <?php endif; ?>
             </div>
         </div>
-        
-        <!-- Tabs -->
-        <div class="tabs">
-            <button class="tab active" onclick="cambiarTab('rapida')">⚡ Reserva Rápida (1 clic)</button>
-            <button class="tab" onclick="cambiarTab('personalizada')">🎯 Reserva Personalizada</button>
-        </div>
-            
-            <!-- Selector de fecha para reserva rápida -->
+            <!-- Selector de fecha para reservar -->
             <div class="fecha-selector">
                 <h3>Selecciona el día</h3>
                 <p><strong>Mostrando: <?= date('d/m/Y', strtotime($fecha_mostrar)) ?></strong></p>
@@ -273,8 +196,8 @@ $horarios = generarHorarios();
                         
                         // Mantener el filtro de búsqueda al cambiar fecha
                         $url_params = "fecha={$fecha_btn}";
-                        if (!empty($filtro_nombre)) {
-                            $url_params .= "&buscar=" . urlencode($filtro_nombre);
+                        if (!empty($buscar)) {
+                            $url_params .= "&buscar=" . urlencode($buscar);
                         }
                         
                         echo "<a href='?{$url_params}' class='{$clase_activo}'>";
@@ -288,21 +211,21 @@ $horarios = generarHorarios();
                 <div style="margin-top: 15px;">
                     <form method="get" style="display: inline-block;">
                         <input type="date" name="fecha" value="<?= $fecha_mostrar ?>" min="<?= date('Y-m-d') ?>" style="width: 200px;">
-                        <?php if (!empty($filtro_nombre)): ?>
-                            <input type="hidden" name="buscar" value="<?= htmlspecialchars($filtro_nombre) ?>">
+                        <?php if (!empty($buscar)): ?>
+                            <input type="hidden" name="buscar" value="<?= htmlspecialchars($buscar) ?>">
                         <?php endif; ?>
                         <button type="submit" class="btn" style="padding: 8px 15px; font-size: 14px;">Ver fecha</button>
                     </form>
                 </div>
             </div>
             
-            <!-- Calendario de reserva rápida -->
+            <!-- Calendario de reserva-->
             <h2> Haz clic para reservar</h2>
             
             <?php if (!empty($canchas)): ?>
                 <div class="calendario-grid" id="canchas-grid">
                     <?php foreach ($canchas as $cancha): ?>
-                        <?php $reservas = obtenerReservas($pdo, $cancha['id_cancha'], $fecha_mostrar); ?>
+                        <?php $reservas = obtenerreservas($pdo, $cancha['id_cancha'], $fecha_mostrar); ?>
                         <div class="cancha-card" data-nombre="<?= strtolower(htmlspecialchars($cancha['nombre'])) ?>" data-lugar="<?= strtolower(htmlspecialchars($cancha['lugar'])) ?>">
                             <div class="cancha-header">
                                 <h3><?= htmlspecialchars($cancha['nombre']) ?></h3>
@@ -312,7 +235,7 @@ $horarios = generarHorarios();
                             <div class="horario-grid">
                                 <?php foreach ($horarios as $hora): ?>
                                     <?php 
-                                    $ocupado = estaOcupado($reservas, $hora);
+                                    $ocupado = estaocupado($reservas, $hora);
                                     $hora_fin = date('H:i', strtotime($hora . ' +1 hour'));
                                     ?>
                                     
@@ -341,8 +264,8 @@ $horarios = generarHorarios();
             <?php else: ?>
                 <div class="no-resultados">
                     <h3>No se encontraron canchas</h3>
-                    <?php if (!empty($filtro_nombre)): ?>
-                        <p>No hay canchas que coincidan con "<strong><?= htmlspecialchars($filtro_nombre) ?></strong>"</p>
+                    <?php if (!empty($buscar)): ?>
+                        <p>No hay canchas que coincidan con "<strong><?= htmlspecialchars($buscar) ?></strong>"</p>
                         <a href="?fecha=<?= $fecha_mostrar ?>" class="btn">Ver todas las canchas</a>
                     <?php else: ?>
                         <p>No hay canchas disponibles en este momento.</p>
@@ -355,51 +278,5 @@ $horarios = generarHorarios();
     <p style="text-align: center;">
         <a href="index.php">Volver al inicio</a>
     </p>
-    <script>
-        // Cambiar entre tabs
-        function cambiarTab(tab) {
-            // Ocultar todos los contenidos
-            var contents = document.querySelectorAll('.tab-content');
-            for (var i = 0; i < contents.length; i++) {
-                contents[i].classList.remove('active');
-            }
-            
-            // Quitar clase active de todos los tabs
-            var tabs = document.querySelectorAll('.tab');
-            for (var i = 0; i < tabs.length; i++) {
-                tabs[i].classList.remove('active');
-            }
-            
-            // Mostrar el contenido seleccionado
-            document.getElementById('tab-' + tab).classList.add('active');
-            event.target.classList.add('active');
-        }
-        
-        // JavaScript BÁSICO para validar horas en reserva personalizada
-        var horaInicio = document.getElementById('hora_inicio');
-        var horaFinal = document.getElementById('hora_final');
-        
-        if (horaInicio && horaFinal) {
-            horaInicio.addEventListener('change', function() {
-                var horaSeleccionada = this.value;
-                
-                // Limpiar opciones de hora final
-                horaFinal.innerHTML = '<option value="">Seleccionar hora</option>';
-                
-                if (horaSeleccionada) {
-                    var horaNum = parseInt(horaSeleccionada.split(':')[0]);
-                    
-                    // Agregar opciones después de la hora seleccionada
-                    for (var h = horaNum + 1; h <= 23; h++) {
-                        var horaFin = h < 10 ? '0' + h + ':00' : h + ':00';
-                        var opcion = document.createElement('option');
-                        opcion.value = horaFin;
-                        opcion.textContent = horaFin;
-                        horaFinal.appendChild(opcion);
-                    }
-                }
-            });
-        }
-    </script>
 </body>
 </html>

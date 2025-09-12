@@ -299,3 +299,45 @@
             border-radius: 3px;
             font-weight: bold;
         }
+        .cancha-info {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+        .cancha-info h1 {
+            margin: 0 0 15px 0;
+            color: #333;
+        }
+        .cancha-info img {
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        .info-item {
+            margin: 10px 0;
+            font-size: 16px;
+        }
+        .info-item strong {
+            color: #555;
+        }
+        .calendario-section {
+            margin-top: 30px;
+        }
+        .horario-slot.pasado {
+            background: #6c757d;
+            color: white;
+            cursor: not-allowed;
+        }
+        .alert-login {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .alert-login a {
+            color: #856404;
+            font-weight: bold;
+        }

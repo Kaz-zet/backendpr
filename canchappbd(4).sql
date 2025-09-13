@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Sep 13, 2025 at 07:16 PM
+-- Generation Time: Sep 13, 2025 at 11:59 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -110,12 +110,27 @@ CREATE TABLE `favoritos` (
 
 CREATE TABLE `reserva` (
   `id_reserva` int(11) NOT NULL,
+  `codigo_reserva` varchar(50) NOT NULL DEFAULT uuid(),
   `fecha` date NOT NULL,
   `hora_inicio` time NOT NULL,
   `hora_final` time NOT NULL,
   `id_usuario` int(11) NOT NULL,
-  `id_cancha` int(11) NOT NULL
+  `id_cancha` int(11) NOT NULL,
+  `jugadores_reservados` int(11) NOT NULL DEFAULT 1,
+  `jugadores_confirmados` int(11) NOT NULL DEFAULT 1,
+  `max_jugadores` int(11) NOT NULL DEFAULT 4,
+  `telefono` varchar(20) DEFAULT NULL,
+  `observaciones` text DEFAULT NULL,
+  `estado` enum('activa','cancelada') DEFAULT 'activa'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `reserva`
+--
+
+INSERT INTO `reserva` (`id_reserva`, `codigo_reserva`, `fecha`, `hora_inicio`, `hora_final`, `id_usuario`, `id_cancha`, `jugadores_reservados`, `jugadores_confirmados`, `max_jugadores`, `telefono`, `observaciones`, `estado`) VALUES
+(43, '730546', '2025-09-13', '18:00:00', '19:00:00', 5, 73, 1, 1, 4, NULL, NULL, 'cancelada'),
+(44, '152582', '2025-09-13', '19:00:00', '20:00:00', 5, 73, 1, 1, 4, NULL, NULL, 'cancelada');
 
 -- --------------------------------------------------------
 
@@ -140,7 +155,8 @@ INSERT INTO `usuario` (`id_usuario`, `nombre`, `email`, `contrasena`, `foto`) VA
 (2, 'Beti', 'beti@gmail.com', '123456', NULL),
 (3, 'Pe', 'Pe@gmail.com', '123', NULL),
 (4, 'b', 'b@gmail.com', '123', NULL),
-(5, 'CAA', 'CA@gmail.com', '123', 'usuario_5_1757718444.png');
+(5, 'CAA', 'CA@gmail.com', '123', 'usuario_5_1757718444.png'),
+(6, 'Z', 'Z@gmail.com', '123', 'usuario_6_1757790994.jpg');
 
 -- --------------------------------------------------------
 
@@ -205,7 +221,10 @@ ALTER TABLE `favoritos`
 -- Indexes for table `reserva`
 --
 ALTER TABLE `reserva`
-  ADD PRIMARY KEY (`id_reserva`);
+  ADD PRIMARY KEY (`id_reserva`),
+  ADD UNIQUE KEY `codigo_reserva` (`codigo_reserva`),
+  ADD UNIQUE KEY `codigo_reserva_2` (`codigo_reserva`),
+  ADD UNIQUE KEY `codigo_reserva_3` (`codigo_reserva`);
 
 --
 -- Indexes for table `usuario`
@@ -259,13 +278,13 @@ ALTER TABLE `favoritos`
 -- AUTO_INCREMENT for table `reserva`
 --
 ALTER TABLE `reserva`
-  MODIFY `id_reserva` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
+  MODIFY `id_reserva` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=45;
 
 --
 -- AUTO_INCREMENT for table `usuario`
 --
 ALTER TABLE `usuario`
-  MODIFY `id_usuario` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+  MODIFY `id_usuario` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT for table `valoracion`

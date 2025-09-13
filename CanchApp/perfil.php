@@ -30,21 +30,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cancelar_reserva'])) 
     
     if (!empty($id_reserva)) {
         try {
+            // Verificar que la reserva pertenece al usuario y está activa
             $stmt = $pdo->prepare("
                 SELECT * FROM reserva 
-                WHERE id_reserva = ? AND id_usuario = ?
+                WHERE id_reserva = ? AND id_usuario = ? AND estado = 'activa'
             ");
             $stmt->execute([$id_reserva, $id_usuario]);
             $reserva = $stmt->fetch();
             
             if ($reserva) {
+                // Verificar si la reserva es futura (no se puede cancelar si ya pasó)
                 $fecha_hora_reserva = $reserva['fecha'] . ' ' . $reserva['hora_inicio'];
                 $ts_reserva = strtotime($fecha_hora_reserva);
                 $ts_actual = time();
                 
                 if ($ts_reserva > $ts_actual) {
-                    // Solo marcar como cancelada
+                    // Cambiar estado a cancelada
                     $stmt = $pdo->prepare("UPDATE reserva SET estado = 'cancelada' WHERE id_reserva = ?");
+                    $stmt->execute([$id_reserva]);
+                    
+                    // Eliminar jugadores asociados
+                    $stmt = $pdo->prepare("DELETE FROM reserva_jugadores WHERE id_reserva = ?");
                     $stmt->execute([$id_reserva]);
                     
                     $msg = "Reserva cancelada exitosamente. Código: " . $reserva['codigo_reserva'];
@@ -172,18 +178,24 @@ try {
     $stmt = $pdo->prepare("
         SELECT 
             r.id_reserva,
+            r.codigo_reserva,
             r.fecha,
             r.hora_inicio,
             r.hora_final,
-            r.codigo_reserva,
+            r.jugadores_confirmados,
+            r.max_jugadores,
+            r.telefono,
+            r.observaciones,
+            r.estado,
             c.nombre as cancha_nombre,
             c.lugar as cancha_lugar,
             CASE 
+                WHEN r.estado = 'cancelada' THEN 'cancelada'
                 WHEN r.fecha < CURDATE() THEN 'pasada'
                 WHEN r.fecha = CURDATE() AND r.hora_final <= CURTIME() THEN 'pasada'
                 WHEN r.fecha = CURDATE() THEN 'hoy'
                 ELSE 'futura'
-            END as estado
+            END as estado_calculado
         FROM reserva r
         INNER JOIN cancha c ON r.id_cancha = c.id_cancha
         WHERE r.id_usuario = ?
@@ -194,7 +206,7 @@ try {
     $reservas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     $reservas = [];
-    $error_reservas = 'Error al cargar reservas: ' . $e->getMessage(); //Se buscan todas las reservas hechas usando el ID.
+    $error_reservas = 'Error al cargar reservas: ' . $e->getMessage();
 }
 ?>
 
@@ -421,7 +433,7 @@ try {
                 <button class="tab" onclick="showTab('reservas')">Historial</button>
             </div>
             
-            <!--TAB PERFIL-->
+            <!--TAB PERFIL----------------------------------------------------------------------------->
             <div id="perfil" class="tab-content active">
                 <div class="section">
                     <h2>Editar Perfil</h2>
@@ -466,18 +478,19 @@ try {
 
 
             
-            <!-- Tab: Mis Reservas -->
+            <!--TAB HISTORIAL---------------------------------------------------------------------------------------- -->
             <div id="reservas" class="tab-content">
                 <div class="section">
                     <h2>Mi Historial de Reservas</h2>
                     
                     <?php
-                    // Calcular estadísticas
+                    // Calcular estadísticas (Si quieren saquenla pero está bueno)
                     $total_reservas = count($reservas);
-                    $reservas_hoy = count(array_filter($reservas, function($r) { return $r['estado'] === 'hoy'; }));
-                    $reservas_futuras = count(array_filter($reservas, function($r) { return $r['estado'] === 'futura'; }));
-                    $reservas_pasadas = count(array_filter($reservas, function($r) { return $r['estado'] === 'pasada'; }));
-                    ?>
+                    $reservas_activas = count(array_filter($reservas, function($r) { return $r['estado'] === 'activa'; }));
+                    $reservas_hoy = count(array_filter($reservas, function($r) { return $r['estado_calculado'] === 'hoy' && $r['estado'] === 'activa'; }));
+                    $reservas_futuras = count(array_filter($reservas, function($r) { return $r['estado_calculado'] === 'futura' && $r['estado'] === 'activa'; }));
+                    $reservas_canceladas = count(array_filter($reservas, function($r) { return $r['estado'] === 'cancelada'; }));
+                    ?>  
                     
                     <div class="stats-grid">
                         <div class="stat-card">
@@ -485,20 +498,27 @@ try {
                             <div class="stat-label">Total Reservas</div>
                         </div>
                         <div class="stat-card">
+                            <div class="stat-number"><?= $reservas_activas ?></div>
+                            <div class="stat-label">Activas</div>
+                        </div>
+                        <div class="stat-card">
                             <div class="stat-number"><?= $reservas_futuras ?></div>
                             <div class="stat-label">Próximas</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-number"><?= $reservas_hoy ?></div>
-                            <div class="stat-label">Hoy</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number"><?= $reservas_pasadas ?></div>
-                            <div class="stat-label">Completadas</div>
+                            <div class="stat-number"><?= $reservas_canceladas ?></div>
+                            <div class="stat-label">Canceladas</div>
                         </div>
                     </div>
+
+
+
+            <!--Acciones del usuario (anda muy raro)-->
                     
                     <?php if (!empty($reservas)): ?>
+
+
+                    <!--Tabla------------------------------------------------------------------------>
                         <table class="reservas-table">
                             <thead>
                                 <tr>
@@ -517,53 +537,61 @@ try {
                                         <td>
                                             <strong><?= date('d/m/Y', strtotime($reserva['fecha'])) ?></strong><br>
                                             <small style="color: #666;">
-                                                <?php
+                                                <?php //Se pasan a español los días y se calcula la fecha.
                                                 $dias = ['Sunday' => 'Domingo', 'Monday' => 'Lunes', 'Tuesday' => 'Martes', 'Wednesday' => 'Miércoles', 'Thursday' => 'Jueves', 'Friday' => 'Viernes', 'Saturday' => 'Sábado'];
                                                 echo $dias[date('l', strtotime($reserva['fecha']))];
                                                 ?>
                                             </small>
                                         </td>
+
                                         <td>
-                                            <strong><?= substr($reserva['hora_inicio'], 0, 5) ?> - <?= substr($reserva['hora_final'], 0, 5) ?></strong>
+                                            <strong><?= substr($reserva['hora_inicio'], 0, 5) ?> - <?= substr($reserva['hora_final'], 0, 5) //Hora inicio y hora final de la cancha. ?></strong>
                                         </td>
+
                                         <td>
-                                            <strong><?= htmlspecialchars($reserva['cancha_nombre']) ?></strong>
+                                            <strong><?= htmlspecialchars($reserva['cancha_nombre']) //Nombre de la cancha?></strong>
                                         </td>
+
                                         <td>
-                                            <?= htmlspecialchars($reserva['cancha_lugar']) ?>
+                                            <?= htmlspecialchars($reserva['cancha_lugar']) //Lugar de la cancha?>
                                         </td>
+
                                         <td>
 
-                                            <?php
+                                            <?php //ESTADO DE LA RESERVA (ANDA RARO).
                                             $estado_class = 'estado-' . $reserva['estado'];
                                             $estado_text = [
                                                 'hoy' => 'HOY',
                                                 'futura' => 'PRÓXIMA',
-                                                'pasada' => 'COMPLETADA'
-                                            ][$reserva['estado']] ?? 'DESCONOCIDO';
+                                                'pasada' => 'COMPLETADA',
+                                                'cancelada' => 'CANCELADA'
+                                            ][$reserva['estado'] === 'cancelada' ? 'cancelada' : $reserva['estado_calculado']] ?? 'DESCONOCIDO';
                                             ?>
                                             <span class="estado-badge <?= $estado_class ?>"><?= $estado_text ?></span>
                                         </td>
                                         <td>
-                                            <?= htmlspecialchars($reserva['codigo_reserva']) ?>
-                                        </td>
-                                        <td>
-                                            <?php if ($reserva['estado'] === 'futura' || $reserva['estado'] === 'hoy'): ?>
-                                                <form method="post" style="display:inline;">
+                                            <?php if ($reserva['estado'] === 'activa' && $reserva['estado_calculado'] === 'futura'): ?>
+                                                <form method="post" class="cancelar-form" 
+                                                      onsubmit="return confirm('¿Estás seguro de que quieres cancelar esta reserva?\n\nCódigo: <?= $reserva['codigo_reserva'] ?>\nFecha: <?= date('d/m/Y', strtotime($reserva['fecha'])) ?>\nHora: <?= substr($reserva['hora_inicio'], 0, 5) ?>');">
                                                     <input type="hidden" name="id_reserva" value="<?= $reserva['id_reserva'] ?>">
-                                                    <button type="submit" name="cancelar_reserva" class="btn btn-secondary" onclick="return confirm('¿Seguro que querés cancelar esta reserva?')">
-                                                        Cancelar
+                                                    <button type="submit" name="cancelar_reserva" class="btn btn-danger">
+                                                         Cancelar
                                                     </button>
                                                 </form>
+                                            <?php elseif ($reserva['estado'] === 'activa' && ($reserva['estado_calculado'] === 'hoy' || $reserva['estado_calculado'] === 'pasada')): ?>
+                                                <span style="color: #666; font-size: 12px;">No se puede cancelar</span>
                                             <?php else: ?>
-                                                <span style="color:#888;">—</span>
+                                                <span style="color: #666; font-size: 12px;">-</span>
                                             <?php endif; ?>
                                         </td>
-
                                     </tr>
                                 <?php endforeach; ?>
+
                             </tbody>
+
                         </table>
+
+                         <!--Termina tabla-------------------------------------------------------------------------------------------->
                     <?php else: ?>
                         <div style="text-align: center; padding: 40px; color: #666;">
                             <h3>No tienes reservas todavía</h3>

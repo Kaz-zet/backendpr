@@ -526,7 +526,7 @@ $estadisticas = obtenerestadisticas($pdo, $id_duenio);
                                 </td>
                                 <td>
                                     <div class="jugadores-info">
-                                        👥 <?= $reserva['jugadores_confirmados'] ?>/<?= $reserva['max_jugadores'] ?>
+                                        👥 <?= $reserva['espacios_reservados'] ?>/4 espacios
                                     </div>
                                 </td>
                                 <td>
@@ -578,9 +578,9 @@ $estadisticas = obtenerestadisticas($pdo, $id_duenio);
     </div>
     
     <p style="text-align: center; margin-top: 30px;">
-        <a href="index.php" class="btn"> Volver al inicio</a> 
-        <a href="cancha.php" class="btn"> Ver todas las canchas</a> 
-        <a href="dueño.php" class="btn"> Crear nueva cancha</a>
+        <a href="index.php" class="btn">🏠 Volver al inicio</a> 
+        <a href="cancha.php" class="btn">👁️ Ver todas las canchas</a> 
+        <a href="dueño.php" class="btn">➕ Crear nueva cancha</a>
     </p>
 </body>
 </html>

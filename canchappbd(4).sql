@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Sep 13, 2025 at 11:59 PM
+-- Generation Time: Sep 14, 2025 at 01:08 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -116,6 +116,7 @@ CREATE TABLE `reserva` (
   `hora_final` time NOT NULL,
   `id_usuario` int(11) NOT NULL,
   `id_cancha` int(11) NOT NULL,
+  `espacios_reservados` int(11) NOT NULL DEFAULT 1,
   `jugadores_reservados` int(11) NOT NULL DEFAULT 1,
   `jugadores_confirmados` int(11) NOT NULL DEFAULT 1,
   `max_jugadores` int(11) NOT NULL DEFAULT 4,
@@ -128,9 +129,22 @@ CREATE TABLE `reserva` (
 -- Dumping data for table `reserva`
 --
 
-INSERT INTO `reserva` (`id_reserva`, `codigo_reserva`, `fecha`, `hora_inicio`, `hora_final`, `id_usuario`, `id_cancha`, `jugadores_reservados`, `jugadores_confirmados`, `max_jugadores`, `telefono`, `observaciones`, `estado`) VALUES
-(43, '730546', '2025-09-13', '18:00:00', '19:00:00', 5, 73, 1, 1, 4, NULL, NULL, 'cancelada'),
-(44, '152582', '2025-09-13', '19:00:00', '20:00:00', 5, 73, 1, 1, 4, NULL, NULL, 'cancelada');
+INSERT INTO `reserva` (`id_reserva`, `codigo_reserva`, `fecha`, `hora_inicio`, `hora_final`, `id_usuario`, `id_cancha`, `espacios_reservados`, `jugadores_reservados`, `jugadores_confirmados`, `max_jugadores`, `telefono`, `observaciones`, `estado`) VALUES
+(56, 'MNTHZ6', '2025-09-14', '21:00:00', '22:00:00', 5, 73, 2, 1, 1, 4, '124124', '', 'cancelada');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `reserva_jugadores`
+--
+
+CREATE TABLE `reserva_jugadores` (
+  `id_jugador_reserva` int(11) NOT NULL,
+  `id_reserva` int(11) NOT NULL,
+  `nombre_jugador` varchar(120) NOT NULL,
+  `telefono_jugador` varchar(20) DEFAULT NULL,
+  `fecha_union` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
 
@@ -227,6 +241,13 @@ ALTER TABLE `reserva`
   ADD UNIQUE KEY `codigo_reserva_3` (`codigo_reserva`);
 
 --
+-- Indexes for table `reserva_jugadores`
+--
+ALTER TABLE `reserva_jugadores`
+  ADD PRIMARY KEY (`id_jugador_reserva`),
+  ADD KEY `id_reserva` (`id_reserva`);
+
+--
 -- Indexes for table `usuario`
 --
 ALTER TABLE `usuario`
@@ -278,7 +299,13 @@ ALTER TABLE `favoritos`
 -- AUTO_INCREMENT for table `reserva`
 --
 ALTER TABLE `reserva`
-  MODIFY `id_reserva` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=45;
+  MODIFY `id_reserva` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=57;
+
+--
+-- AUTO_INCREMENT for table `reserva_jugadores`
+--
+ALTER TABLE `reserva_jugadores`
+  MODIFY `id_jugador_reserva` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `usuario`
@@ -308,6 +335,12 @@ ALTER TABLE `verificacion`
 ALTER TABLE `favoritos`
   ADD CONSTRAINT `favoritos_ibfk_1` FOREIGN KEY (`id_usuario`) REFERENCES `usuario` (`id_usuario`),
   ADD CONSTRAINT `favoritos_ibfk_2` FOREIGN KEY (`id_cancha`) REFERENCES `cancha` (`id_cancha`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `reserva_jugadores`
+--
+ALTER TABLE `reserva_jugadores`
+  ADD CONSTRAINT `reserva_jugadores_ibfk_1` FOREIGN KEY (`id_reserva`) REFERENCES `reserva` (`id_reserva`) ON DELETE CASCADE;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

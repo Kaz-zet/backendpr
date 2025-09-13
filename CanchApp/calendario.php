@@ -8,16 +8,15 @@ $id_usuario = $_SESSION['id'] ?? null;
 $msg = '';
 $error = '';
 
-// Obtener ID de la cancha específica
+//Sacamos la ID de la cancha.
 $id_cancha = $_GET['id'] ?? null;
 
-// Fecha para mostrar (por defecto hoy)
+//Mostramos la fecha de hoy.
 $fecha_mostrar = $_GET['fecha'] ?? date('Y-m-d');
 
-// Si hay ID de cancha específica, mostrar solo esa cancha
+//Mostramos y preparamos los datos de la cancha espicifica usando la ID q sacamos.
 if ($id_cancha) {
     try {
-        // Obtener los datos de la cancha específica
         $stmt = $pdo->prepare("
             SELECT c.*, d.nombre as duenio_nombre 
             FROM cancha c 
@@ -32,14 +31,16 @@ if ($id_cancha) {
             exit;
         }
         
-        $canchas = [$cancha]; // Convertir a array para mantener compatibilidad
+        $canchas = [$cancha]; //Se convierten las canchas en array asi no hay ningun problema de compatibilidad.
         
     } catch (PDOException $e) {
         $error = "Error al cargar la cancha: " . $e->getMessage();
         $canchas = [];
     }
 } else {
-    // Si no hay ID específico, mostrar todas (comportamiento original)
+   
+
+//------------------------------------------BUSCA CANCHAS-----------------------------------------------
     $buscar = $_GET['buscar'] ?? '';
     
     try {
@@ -63,99 +64,20 @@ if ($id_cancha) {
     }
 }
 
-// Procesar reserva RÁPIDA (un clic)
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reserva_rapida'])) {
-    if (!$id_usuario) {
-        header("Location: login.php");
-        exit;
-    }
-    
-    $id_cancha_reserva = $_POST['id_cancha'] ?? '';
-    $fecha = $_POST['fecha'] ?? '';
-    $hora_inicio = $_POST['hora_inicio'] ?? '';
-    
-    if (empty($id_cancha_reserva) || empty($fecha) || empty($hora_inicio)) {
-        $error = "Datos incompletos para la reserva.";
-    } else {
-        // Calcular hora final automáticamente (1 hora después)
-        $hora_final = date('H:i', strtotime($hora_inicio . ' +1 hour'));
-        
-        // Validar que la fecha no esté atrasada
-        $fecha_actual = date('Y-m-d');
-        // ahora comparamos timestamps completos (fecha+hora)
-        $ts_actual = strtotime(date('Y-m-d H:i'));
-        $ts_solicitada = strtotime($fecha . ' ' . $hora_inicio);
-        
-        if ($fecha < $fecha_actual) {
-            $error = "No puedes reservar en fechas ya pasadas.";
-        } elseif ($fecha === $fecha_actual && $ts_solicitada <= $ts_actual) {
-            $error = "No puedes reservar en horarios que ya pasaron hoy.";
-        } else {
-            try {
-                // Verificar si ya existe una reserva en ese horario (comprobación por solapamiento)
-                $stmt = $pdo->prepare("
-                    SELECT COUNT(*) FROM reserva 
-                    WHERE id_cancha = ? AND fecha = ? AND estado = 'activa'
-                    AND (
-                        (hora_inicio <= ? AND hora_final > ?) 
-                        OR
-                        (hora_inicio < ? AND hora_final >= ?)
-                        OR
-                        (hora_inicio >= ? AND hora_final <= ?)
-                    )
-                ");
-                $stmt->execute([
-                    $id_cancha_reserva, $fecha, 
-                    $hora_inicio, $hora_inicio,
-                    $hora_final, $hora_final,
-                    $hora_inicio, $hora_final
-                ]);
-                
-                if ($stmt->fetchColumn() > 0) {
-                    $error = "Ya existe una reserva en ese horario.";
-                } else {
-
-                    $codigo_reserva = rand(100000, 999999);
-
-                    // Crear la reserva
-                    $stmt = $pdo->prepare("
-                        INSERT INTO reserva (fecha, hora_inicio, hora_final, id_usuario, id_cancha, codigo_reserva) 
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    ");
-                    $stmt->execute([$fecha, $hora_inicio, $hora_final, $id_usuario, $id_cancha_reserva, $codigo_reserva]);
-                    
-                    // Obtener el nombre de la cancha para el mensaje
-                    $stmt = $pdo->prepare("SELECT nombre FROM cancha WHERE id_cancha = ?");
-                    $stmt->execute([$id_cancha_reserva]);
-                    $nombre_cancha = $stmt->fetchColumn();
-                    
-                    $msg = "¡Reserva realizada! 🎉<br>
-                           <strong>{$nombre_cancha}</strong><br>
-                            " . date('d/m/Y', strtotime($fecha)) . "<br>
-                            {$hora_inicio} - {$hora_final}<br>
-                            <b>Código de reserva: {$codigo_reserva}</b>";
-                }
-            } catch (PDOException $e) {
-                $error = "Error al procesar la reserva: " . $e->getMessage();
-            }
-        }
-    }
-}
-
-// Función para obtener reservas de una cancha en una fecha específica
+//Saca reservas de una hora y fecha especifica.
 function obtenerreservas($pdo, $id_cancha, $fecha) {
     $stmt = $pdo->prepare("
         SELECT r.*, u.nombre as usuario_nombre 
         FROM reserva r 
         INNER JOIN usuario u ON r.id_usuario = u.id_usuario 
-        WHERE r.id_cancha = ? AND r.fecha = ?
+        WHERE r.id_cancha = ? AND r.fecha = ? AND r.estado = 'activa'
         ORDER BY r.hora_inicio
     ");
     $stmt->execute([$id_cancha, $fecha]);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
-// Generar horarios disponibles
+//----------------------------------SE GENERAN HORARIOS DISPONIBLES-----------------------------------------
 function generarhorarios() {
     $horarios = [];
     for ($h = 8; $h <= 22; $h++) {
@@ -164,21 +86,12 @@ function generarhorarios() {
     return $horarios;
 }
 
-/**
- * Verificar si un horario está ocupado o ya pasó
- * signature preservada: (reservas, hora, fecha_mostrar)
- * devuelve:
- *  - array con datos de reserva + ['tipo'=>'ocupada'] si existe reserva solapante
- *  - array ['usuario_nombre'=>'Hora pasada','tipo'=>'pasada'] si ya pasó
- *  - false si está libre
- */
+//Revisamos si el horario está ocupado y si ya pasó.
 function estaocupado($reservas, $hora, $fecha_mostrar) {
     $hora_fin = date('H:i', strtotime($hora . ' +1 hour'));
 
-    // 1) revisar solapamientos con reservas existentes (considerando horas con segundos en DB)
     foreach ($reservas as $reserva) {
-        // asumimos que en DB las columnas son hora_inicio y hora_final en formato 'HH:MM:SS' o 'HH:MM'
-        $r_inicio = substr($reserva['hora_inicio'], 0, 5); // "HH:MM"
+        $r_inicio = substr($reserva['hora_inicio'], 0, 5);
         $r_final  = substr($reserva['hora_final'], 0, 5);
 
         if (
@@ -186,15 +99,19 @@ function estaocupado($reservas, $hora, $fecha_mostrar) {
             ($hora_fin > $r_inicio && $hora_fin <= $r_final) ||
             ($hora <= $r_inicio && $hora_fin >= $r_final)
         ) {
-            // devolvemos la reserva y marcamos tipo 'ocupada'
-            return array_merge($reserva, ['tipo' => 'ocupada']);
+            // Mostrar información de ocupación con jugadores
+            $jugadores_info = $reserva['jugadores_confirmados'] ?? 1;
+            return array_merge($reserva, [
+                'tipo' => 'ocupada',
+                'info_jugadores' => "({$jugadores_info}/4 jugadores)"
+            ]);
         }
     }
 
-    // 2) Si la fecha es HOY, chequear si la hora ya pasó comparando timestamps con fecha completa
+    //Si la fecha es HOY, fijamos si la hora ya pasó.
     if ($fecha_mostrar === date('Y-m-d')) {
         $hora_actual_ts = strtotime(date('Y-m-d H:i'));
-        $hora_slot_ts   = strtotime($fecha_mostrar . ' ' . $hora); // fecha + hora del slot
+        $hora_slot_ts   = strtotime($fecha_mostrar . ' ' . $hora);
 
         if ($hora_slot_ts <= $hora_actual_ts) {
             return ['usuario_nombre' => 'Hora pasada', 'tipo' => 'pasada'];
@@ -204,7 +121,7 @@ function estaocupado($reservas, $hora, $fecha_mostrar) {
     return false;
 }
 
-// Función para convertir día de la semana a español
+//SE PASA DE INGLÉS DEFAULT A ESPAÑOL
 function diasespanol($dia_ingles) {
     $dias = [
         'Mon' => 'Lun',
@@ -228,6 +145,68 @@ $horarios = generarhorarios();
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= $id_cancha && !empty($canchas) ? htmlspecialchars($canchas[0]['nombre']) . ' - Reservas' : 'Calendario de Reservas' ?></title>
     <link rel="stylesheet" href="css/calendario.css">
+    <style>
+        /* Estilos adicionales para mostrar información de jugadores */
+        .horario-slot.ocupado {
+            background: linear-gradient(135deg, #ff6b6b, #ff8e8e);
+            color: white;
+            cursor: not-allowed;
+            position: relative;
+        }
+        
+        .horario-slot.ocupado .jugadores-info {
+            font-size: 11px;
+            opacity: 0.9;
+            margin-top: 2px;
+        }
+        
+        .horario-slot.disponible {
+            background: linear-gradient(135deg, #51cf66, #69db7c);
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .horario-slot.disponible:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            background: linear-gradient(135deg, #40c057, #51cf66);
+        }
+        
+        .horario-slot.pasado {
+            background: #868e96;
+            color: white;
+            cursor: not-allowed;
+        }
+        
+        .reserva-btn {
+            background: none;
+            border: none;
+            width: 100%;
+            height: 100%;
+            color: inherit;
+            font-size: inherit;
+            cursor: pointer;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .slot-hora {
+            font-weight: bold;
+            margin-bottom: 2px;
+        }
+        
+        .slot-disponible {
+            font-size: 10px;
+            opacity: 0.9;
+        }
+    </style>
+
+
+
 </head>
 <body>
     <div class="container">
@@ -240,7 +219,9 @@ $horarios = generarhorarios();
         <?php endif; ?>
         
         <?php if (!$id_cancha): ?>
-        <!-- Búsqueda solo si no es cancha específica -->
+
+
+        <!--BUSCAR CANCHA--------------------------------------------------------------------------------->
         <div class="busqueda">
             <h3>Buscar Canchas</h3>
             <form method="get" class="search-container">
@@ -264,7 +245,9 @@ $horarios = generarhorarios();
             </div>
         </div>
         <?php else: ?>
-        <!-- Información de cancha específica -->
+
+
+        <!--CANCHA ESPECIFICA POR ID DE CANCHA.PHP -->
         <?php if (!empty($canchas)): ?>
         <div class="cancha-info">
             <h1><?= htmlspecialchars($canchas[0]['nombre']) ?></h1>
@@ -286,6 +269,9 @@ $horarios = generarhorarios();
             <div class="info-item">
                 <strong>Descripción:</strong> <?= htmlspecialchars($canchas[0]['bio']) ?>
             </div>
+            <div class="info-item" style="background: #e3f2fd; padding: 10px; border-radius: 5px; margin: 10px 0;">
+                <strong> Cancha de Padel - Máximo 4 jugadores por reserva</strong>
+            </div>
         </div>
         <?php endif; ?>
         <?php endif; ?>
@@ -296,14 +282,14 @@ $horarios = generarhorarios();
             </div>
         <?php endif; ?>
             
-        <!-- Selector de fecha para reservar -->
+        <!--Con esto podemos ver las fechas para reservar, ya existe, invocamos un calendario---------------------------------------------->
         <div class="fecha-selector">
             <h3>Selecciona el día</h3>
             <p><strong>Mostrando: <?= date('d/m/Y', strtotime($fecha_mostrar)) ?></strong></p>
             
             <div class="fecha-botones">
                 <?php
-                // Generar botones para los próximos 7 días
+                //Con esto generamos los botones para los proximos siete dias incluyendo el día de hoy. Esto se actualiza con horario real.
                 for ($i = 0; $i < 7; $i++) {
                     $fecha_btn = date('Y-m-d', strtotime("+$i days"));
                     $fecha_texto = date('d/m', strtotime("+$i days"));
@@ -311,7 +297,7 @@ $horarios = generarhorarios();
                     $dia_semana = diasespanol($dia_semana_ingles);
                     $clase_activo = ($fecha_btn == $fecha_mostrar) ? 'activo' : '';
                     
-                    // Mantener el ID de cancha en la URL si existe
+                    //Vemos la ID de la cancha en la URL (Se puede sacar).
                     $url_params = "fecha={$fecha_btn}";
                     if ($id_cancha) {
                         $url_params .= "&id={$id_cancha}";
@@ -327,7 +313,7 @@ $horarios = generarhorarios();
                 ?>
             </div>
             
-            <!-- Formulario manual para seleccionar fecha -->
+            <!--Calendario!!! -->
             <div style="margin-top: 15px;">
                 <form method="get" style="display: inline-block;">
                     <?php if ($id_cancha): ?>
@@ -342,7 +328,7 @@ $horarios = generarhorarios();
             </div>
         </div>
         
-        <!-- Calendario de reserva -->
+        <!-- No entiendo xd----------------------------->
         <h2><?= $id_usuario ? 'Haz clic para reservar' : 'Horarios disponibles' ?></h2>
         
         <?php if (!empty($canchas)): ?>
@@ -365,31 +351,31 @@ $horarios = generarhorarios();
                                 <?php if ($ocupado): ?>
                                     <?php if ($ocupado['tipo'] === 'pasada'): ?>
                                         <div class="horario-slot pasado" title="Esta hora ya pasó">
-                                            <div><?= $hora ?></div>
-                                            <div class="reserva-tooltip">Hora pasada</div>
+                                            <div class="slot-hora"><?= $hora ?></div>
+                                            <div class="slot-disponible">Hora pasada</div>
                                         </div>
                                     <?php else: ?>
                                         <div class="horario-slot ocupado" title="Ocupado por <?= htmlspecialchars($ocupado['usuario_nombre']) ?>">
-                                            <div><?= $hora ?></div>
-                                            <div class="reserva-tooltip">Ocupado</div>
+                                            <div class="slot-hora"><?= $hora ?></div>
+                                            <div class="jugadores-info">
+                                                <?= $ocupado['info_espacios'] ?? 'Ocupado' ?>
+                                            </div>
                                         </div>
                                     <?php endif; ?>
                                 <?php else: ?>
                                     <?php if ($id_usuario): ?>
-                                        <form method="post" style="margin: 0;">
-                                            <input type="hidden" name="id_cancha" value="<?= $cancha['id_cancha'] ?>">
-                                            <input type="hidden" name="fecha" value="<?= $fecha_mostrar ?>">
-                                            <input type="hidden" name="hora_inicio" value="<?= $hora ?>">
-                                            <button type="submit" name="reserva_rapida" class="horario-slot disponible"
-                                                    title="Clic para reservar <?= $hora ?> - <?= $hora_fin ?>">
-                                                <div><?= $hora ?></div>
-                                                <div class="reserva-tooltip"><?= $hora ?> - <?= $hora_fin ?></div>
-                                            </button>
-                                        </form>
+                                        <div class="horario-slot disponible">
+                                            <a href="reserva_modal.php?id_cancha=<?= $cancha['id_cancha'] ?>&fecha=<?= $fecha_mostrar ?>&hora_inicio=<?= $hora ?>" 
+                                               class="reserva-btn"
+                                               title="Reservar <?= $hora ?> - <?= $hora_fin ?>">
+                                                <div class="slot-hora"><?= $hora ?></div>
+                                                <div class="slot-disponible">Disponible</div>
+                                            </a>
+                                        </div>
                                     <?php else: ?>
                                         <div class="horario-slot disponible" title="Disponible - <?= $hora ?> - <?= $hora_fin ?>">
-                                            <div><?= $hora ?></div>
-                                            <div class="reserva-tooltip">Disponible</div>
+                                            <div class="slot-hora"><?= $hora ?></div>
+                                            <div class="slot-disponible">Disponible</div>
                                         </div>
                                     <?php endif; ?>
                                 <?php endif; ?>

@@ -151,7 +151,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['accion'] === 'editar') { //
     <meta charset="UTF-8">
     <title>Listado de canchas</title>
 </head>
-<body>
+<body>    
     <?php if ($misFavoritos): ?>
     <h1>Mis Favoritos</h1>
     <ul>

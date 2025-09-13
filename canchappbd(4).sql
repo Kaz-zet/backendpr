@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Sep 10, 2025 at 07:18 PM
+-- Generation Time: Sep 13, 2025 at 07:16 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -63,7 +63,8 @@ CREATE TABLE `cancha` (
 --
 
 INSERT INTO `cancha` (`id_cancha`, `id_duenio`, `nombre`, `lugar`, `foto`, `bio`, `verificado`, `valoracion`) VALUES
-(44, 2, 'Talleres', 'Rivadavia 1234', '', 'El mejor lugar!', 0, 0);
+(73, 2, 'Talleres', 'Alsina 1567', 'cancha_1757704787_8018.png', 'Cancha de Padel 1v1 y 2v2', 0, 0),
+(74, 2, 'Club Atlético Boca Juniors', 'Alsina 1244', 'cancha_1757718101_6684.png', 'Cancha de padel 1v1 y 2v2!', 0, 0);
 
 -- --------------------------------------------------------
 
@@ -101,13 +102,6 @@ CREATE TABLE `favoritos` (
   `fecha_agregado` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Dumping data for table `favoritos`
---
-
-INSERT INTO `favoritos` (`id_favorito`, `id_usuario`, `id_cancha`, `fecha_agregado`) VALUES
-(18, 2, 44, '2025-09-10 13:45:34');
-
 -- --------------------------------------------------------
 
 --
@@ -133,18 +127,20 @@ CREATE TABLE `usuario` (
   `id_usuario` int(11) NOT NULL,
   `nombre` varchar(120) NOT NULL,
   `email` varchar(150) NOT NULL,
-  `contrasena` varchar(255) NOT NULL
+  `contrasena` varchar(255) NOT NULL,
+  `foto` varchar(255) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `usuario`
 --
 
-INSERT INTO `usuario` (`id_usuario`, `nombre`, `email`, `contrasena`) VALUES
-(1, 'A', 'A@gmail.com', '123456'),
-(2, 'Beti', 'beti@gmail.com', '123456'),
-(3, 'Pe', 'Pe@gmail.com', '123'),
-(4, 'b', 'b@gmail.com', '123');
+INSERT INTO `usuario` (`id_usuario`, `nombre`, `email`, `contrasena`, `foto`) VALUES
+(1, 'A', 'A@gmail.com', '123456', NULL),
+(2, 'Beti', 'beti@gmail.com', '123456', NULL),
+(3, 'Pe', 'Pe@gmail.com', '123', NULL),
+(4, 'b', 'b@gmail.com', '123', NULL),
+(5, 'CAA', 'CA@gmail.com', '123', 'usuario_5_1757718444.png');
 
 -- --------------------------------------------------------
 
@@ -172,14 +168,6 @@ CREATE TABLE `verificacion` (
   `observacion` varchar(180) NOT NULL,
   `id_usuario` int(11) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `verificacion`
---
-
-INSERT INTO `verificacion` (`id_verificacion`, `estado`, `fecha`, `observacion`, `id_usuario`) VALUES
-(2, 'aprobado', '2025-08-31', '', 1),
-(3, 'aprobado', '2025-08-31', '', 3);
 
 --
 -- Indexes for dumped tables
@@ -211,7 +199,7 @@ ALTER TABLE `duenio`
 ALTER TABLE `favoritos`
   ADD PRIMARY KEY (`id_favorito`),
   ADD UNIQUE KEY `id_usuario` (`id_usuario`,`id_cancha`),
-  ADD KEY `id_cancha` (`id_cancha`);
+  ADD KEY `favoritos_ibfk_2` (`id_cancha`);
 
 --
 -- Indexes for table `reserva`
@@ -253,7 +241,7 @@ ALTER TABLE `admin`
 -- AUTO_INCREMENT for table `cancha`
 --
 ALTER TABLE `cancha`
-  MODIFY `id_cancha` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=46;
+  MODIFY `id_cancha` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=76;
 
 --
 -- AUTO_INCREMENT for table `duenio`
@@ -265,19 +253,19 @@ ALTER TABLE `duenio`
 -- AUTO_INCREMENT for table `favoritos`
 --
 ALTER TABLE `favoritos`
-  MODIFY `id_favorito` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
+  MODIFY `id_favorito` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=36;
 
 --
 -- AUTO_INCREMENT for table `reserva`
 --
 ALTER TABLE `reserva`
-  MODIFY `id_reserva` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id_reserva` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
 
 --
 -- AUTO_INCREMENT for table `usuario`
 --
 ALTER TABLE `usuario`
-  MODIFY `id_usuario` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id_usuario` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- AUTO_INCREMENT for table `valoracion`
@@ -300,7 +288,7 @@ ALTER TABLE `verificacion`
 --
 ALTER TABLE `favoritos`
   ADD CONSTRAINT `favoritos_ibfk_1` FOREIGN KEY (`id_usuario`) REFERENCES `usuario` (`id_usuario`),
-  ADD CONSTRAINT `favoritos_ibfk_2` FOREIGN KEY (`id_cancha`) REFERENCES `cancha` (`id_cancha`);
+  ADD CONSTRAINT `favoritos_ibfk_2` FOREIGN KEY (`id_cancha`) REFERENCES `cancha` (`id_cancha`) ON DELETE CASCADE;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

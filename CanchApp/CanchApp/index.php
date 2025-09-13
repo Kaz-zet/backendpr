@@ -21,13 +21,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') { //Esto hace q el login sea necesari
     } elseif (isset($_POST['valorar'])) { //Adentro va el nombre del boton, entonces sería, si vos apretas el boton de reservar, te manda un mensaje y en este caso cada uno tiene color.
         $valoracionmsj = "¡Valoración enviada!";
     }
-    elseif (isset($_POST['ver'])) { //Adentro va el nombre del boton, entonces sería, si vos apretas el boton de reservar, te manda un mensaje y en este caso cada uno tiene color.
-        $ver = "¡!";
+    elseif (isset($_POST['ver'])) { 
     }
-    elseif (isset($_POST['pedir'])) { //Adentro va el nombre del boton, entonces sería, si vos apretas el boton de reservar, te manda un mensaje y en este caso cada uno tiene color.
+    elseif (isset($_POST['pedir'])) {
         $pedir = "¡!";
     }
-    elseif (isset($_POST['calendario'])) { //Adentro va el nombre del boton, entonces sería, si vos apretas el boton de reservar, te manda un mensaje y en este caso cada uno tiene color.
+    elseif (isset($_POST['calendario'])) { 
         $calendario = "¡!";
     }
     
@@ -64,9 +63,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') { //Esto hace q el login sea necesari
 <!--visible para todos-->
 <form method="post">
     <button type="submit" name="ver">Ver canchas!</button>
+</form>
+<?php if ($rol === 'usuario'): ?>
+<form method="post">
     <button type="submit" name="pedir">Pedir ser Dueño!</button>
 </form>
-
+    <p><a href="perfil.php">Ver mi perfil</a></p>
+<?php endif; ?>
 
     <?php if ($rol === 'duenio'): ?>
 <!-- Este if, cerrado con endif permite que si y unicamente si el usuario está logueado y tiene rol de dueño pueda ver ese mensaje.-->

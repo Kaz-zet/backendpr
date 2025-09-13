@@ -1,4 +1,7 @@
 <?php
+
+date_default_timezone_set('America/Argentina/Buenos_Aires');
+
 $host = 'localhost';
 $db   = 'canchappbd';
 $user = 'root';
@@ -13,6 +16,7 @@ $options = [
 
 try {
     $pdo = new PDO($dsn, $user, $pass, $options);
+    $pdo->exec("SET time_zone = '-03:00'"); 
 } catch (PDOException $e) {
     die("Error de conexión: " . $e->getMessage());
 }

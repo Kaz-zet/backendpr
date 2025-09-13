@@ -2,6 +2,8 @@
 session_start();
 require_once 'conexiones/conDB.php';
 
+date_default_timezone_set('America/Argentina/Buenos_Aires');
+
 $id_usuario = $_SESSION['id'] ?? null;
 $msg = '';
 $error = '';
@@ -80,21 +82,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reserva_rapida'])) {
         
         // Validar que la fecha no esté atrasada
         $fecha_actual = date('Y-m-d');
-        $hora_actual = date('H:i');
+        // ahora comparamos timestamps completos (fecha+hora)
+        $ts_actual = strtotime(date('Y-m-d H:i'));
+        $ts_solicitada = strtotime($fecha . ' ' . $hora_inicio);
         
         if ($fecha < $fecha_actual) {
             $error = "No puedes reservar en fechas ya pasadas.";
-        } elseif ($fecha === $fecha_actual && $hora_inicio <= $hora_actual) {
+        } elseif ($fecha === $fecha_actual && $ts_solicitada <= $ts_actual) {
             $error = "No puedes reservar en horarios que ya pasaron hoy.";
         } else {
             try {
-                // Verificar si ya existe una reserva en ese horario
+                // Verificar si ya existe una reserva en ese horario (comprobación por solapamiento)
                 $stmt = $pdo->prepare("
                     SELECT COUNT(*) FROM reserva 
                     WHERE id_cancha = ? AND fecha = ? 
-                    AND ((hora_inicio <= ? AND hora_final > ?) 
-                    OR (hora_inicio < ? AND hora_final >= ?)
-                    OR (hora_inicio >= ? AND hora_final <= ?))
+                    AND (
+                        (hora_inicio <= ? AND hora_final > ?) 
+                        OR
+                        (hora_inicio < ? AND hora_final >= ?)
+                        OR
+                        (hora_inicio >= ? AND hora_final <= ?)
+                    )
                 ");
                 $stmt->execute([
                     $id_cancha_reserva, $fecha, 
@@ -152,25 +160,43 @@ function generarhorarios() {
     return $horarios;
 }
 
-// Verificar si un horario está ocupado o ya pasó
+/**
+ * Verificar si un horario está ocupado o ya pasó
+ * signature preservada: (reservas, hora, fecha_mostrar)
+ * devuelve:
+ *  - array con datos de reserva + ['tipo'=>'ocupada'] si existe reserva solapante
+ *  - array ['usuario_nombre'=>'Hora pasada','tipo'=>'pasada'] si ya pasó
+ *  - false si está libre
+ */
 function estaocupado($reservas, $hora, $fecha_mostrar) {
     $hora_fin = date('H:i', strtotime($hora . ' +1 hour'));
-    
-    // Si es hoy, verificar si la hora ya pasó
-    if ($fecha_mostrar === date('Y-m-d')) {
-        $hora_actual = date('H:i');
-        if ($hora <= $hora_actual) {
-            return ['usuario_nombre' => 'Hora pasada', 'tipo' => 'pasada'];
-        }
-    }
-    
+
+    // 1) revisar solapamientos con reservas existentes (considerando horas con segundos en DB)
     foreach ($reservas as $reserva) {
-        if (($hora >= $reserva['hora_inicio'] && $hora < $reserva['hora_final']) ||
-            ($hora_fin > $reserva['hora_inicio'] && $hora_fin <= $reserva['hora_final']) ||
-            ($hora <= $reserva['hora_inicio'] && $hora_fin >= $reserva['hora_final'])) {
+        // asumimos que en DB las columnas son hora_inicio y hora_final en formato 'HH:MM:SS' o 'HH:MM'
+        $r_inicio = substr($reserva['hora_inicio'], 0, 5); // "HH:MM"
+        $r_final  = substr($reserva['hora_final'], 0, 5);
+
+        if (
+            ($hora >= $r_inicio && $hora < $r_final) ||
+            ($hora_fin > $r_inicio && $hora_fin <= $r_final) ||
+            ($hora <= $r_inicio && $hora_fin >= $r_final)
+        ) {
+            // devolvemos la reserva y marcamos tipo 'ocupada'
             return array_merge($reserva, ['tipo' => 'ocupada']);
         }
     }
+
+    // 2) Si la fecha es HOY, chequear si la hora ya pasó comparando timestamps con fecha completa
+    if ($fecha_mostrar === date('Y-m-d')) {
+        $hora_actual_ts = strtotime(date('Y-m-d H:i'));
+        $hora_slot_ts   = strtotime($fecha_mostrar . ' ' . $hora); // fecha + hora del slot
+
+        if ($hora_slot_ts <= $hora_actual_ts) {
+            return ['usuario_nombre' => 'Hora pasada', 'tipo' => 'pasada'];
+        }
+    }
+
     return false;
 }
 
@@ -322,7 +348,7 @@ $horarios = generarhorarios();
                     <div class="cancha-card" data-nombre="<?= strtolower(htmlspecialchars($cancha['nombre'])) ?>" data-lugar="<?= strtolower(htmlspecialchars($cancha['lugar'])) ?>">
                         <div class="cancha-header">
                             <h3><?= htmlspecialchars($cancha['nombre']) ?></h3>
-                            <p style="margin: 5px 0; font-size: 14px;">📍 <?= htmlspecialchars($cancha['lugar']) ?></p>
+                            <p style="margin: 5px 0; font-size: 14px;"> <?= htmlspecialchars($cancha['lugar']) ?></p>
                         </div>
                         
                         <div class="horario-grid">

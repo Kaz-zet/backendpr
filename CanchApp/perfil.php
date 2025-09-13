@@ -24,6 +24,42 @@ try {
     die("Error: " . $e->getMessage());
 }
 
+// CANCELAR RESERVA
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cancelar_reserva'])) {
+    $id_reserva = $_POST['id_reserva'] ?? '';
+    
+    if (!empty($id_reserva)) {
+        try {
+            $stmt = $pdo->prepare("
+                SELECT * FROM reserva 
+                WHERE id_reserva = ? AND id_usuario = ?
+            ");
+            $stmt->execute([$id_reserva, $id_usuario]);
+            $reserva = $stmt->fetch();
+            
+            if ($reserva) {
+                $fecha_hora_reserva = $reserva['fecha'] . ' ' . $reserva['hora_inicio'];
+                $ts_reserva = strtotime($fecha_hora_reserva);
+                $ts_actual = time();
+                
+                if ($ts_reserva > $ts_actual) {
+                    // Solo marcar como cancelada
+                    $stmt = $pdo->prepare("UPDATE reserva SET estado = 'cancelada' WHERE id_reserva = ?");
+                    $stmt->execute([$id_reserva]);
+                    
+                    $msg = "Reserva cancelada exitosamente. Código: " . $reserva['codigo_reserva'];
+                } else {
+                    $error = "No puedes cancelar una reserva que ya comenzó o pasó.";
+                }
+            } else {
+                $error = "Reserva no encontrada o no tienes permisos para cancelarla.";
+            }
+        } catch (PDOException $e) {
+            $error = "Error al cancelar la reserva: " . $e->getMessage();
+        }
+    }
+}
+
 //Actualizar perfil. Acá podemos actualizarlo como queramos.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['actualizar_perfil'])) {
     $nombre = trim($_POST['nombre'] ?? '');
@@ -139,6 +175,7 @@ try {
             r.fecha,
             r.hora_inicio,
             r.hora_final,
+            r.codigo_reserva,
             c.nombre as cancha_nombre,
             c.lugar as cancha_lugar,
             CASE 
@@ -470,6 +507,8 @@ try {
                                     <th>Cancha</th>
                                     <th>Ubicación</th>
                                     <th>Estado</th>
+                                    <th>Código</th>
+                                    <th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -494,6 +533,7 @@ try {
                                             <?= htmlspecialchars($reserva['cancha_lugar']) ?>
                                         </td>
                                         <td>
+
                                             <?php
                                             $estado_class = 'estado-' . $reserva['estado'];
                                             $estado_text = [
@@ -504,6 +544,22 @@ try {
                                             ?>
                                             <span class="estado-badge <?= $estado_class ?>"><?= $estado_text ?></span>
                                         </td>
+                                        <td>
+                                            <?= htmlspecialchars($reserva['codigo_reserva']) ?>
+                                        </td>
+                                        <td>
+                                            <?php if ($reserva['estado'] === 'futura' || $reserva['estado'] === 'hoy'): ?>
+                                                <form method="post" style="display:inline;">
+                                                    <input type="hidden" name="id_reserva" value="<?= $reserva['id_reserva'] ?>">
+                                                    <button type="submit" name="cancelar_reserva" class="btn btn-secondary" onclick="return confirm('¿Seguro que querés cancelar esta reserva?')">
+                                                        Cancelar
+                                                    </button>
+                                                </form>
+                                            <?php else: ?>
+                                                <span style="color:#888;">—</span>
+                                            <?php endif; ?>
+                                        </td>
+
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>

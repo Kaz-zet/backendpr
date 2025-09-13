@@ -76,6 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['accion'] === 'editar') { //
     $nombre = trim($_POST['nombre']);
     $lugar  = trim($_POST['lugar']);
     $bio  = trim($_POST['bio']);
+    $foto  = "";
 
     if ($nombre === '' || $lugar === '' || $bio === '') {
         $msgError[$id] = "Completa todos los campos.";
@@ -87,9 +88,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['accion'] === 'editar') { //
             if ($stmt->fetch()) {
                 $msgError[$id] = "Ya existe otra cancha con ese nombre.";
             } else {
-                $stmt = $pdo->prepare("UPDATE cancha SET nombre = ?, lugar = ?, bio = ? WHERE id_cancha = ?");
-                $stmt->execute([$nombre, $lugar, $bio, $id]);
-                $msgOk[$id] = "Cancha editada correctamente.";
+
+                 if (!empty($_FILES['foto']['name'])) {
+                    // Buscar la foto vieja
+                    $stmt = $pdo->prepare("SELECT foto FROM cancha WHERE id_cancha = ?");
+                    $stmt->execute([$id]);
+                    $cancha = $stmt->fetch();
+
+                    if ($cancha && !empty($cancha['foto'])) {
+                        $rutaVieja = __DIR__ . "/uploads/" . $cancha['foto'];
+                        if (file_exists($rutaVieja)) {
+                            unlink($rutaVieja);
+                        }
+                    }
+
+                    // Guardar nueva foto
+                    $nombreArchivo = time() . "_" . basename($_FILES['foto']['name']);
+                    $rutaDestino = __DIR__ . "/uploads/" . $nombreArchivo;
+                    move_uploaded_file($_FILES['foto']['tmp_name'], $rutaDestino);
+
+                    $foto = $nombreArchivo;
+                }
+                 if ($foto) {
+                    $stmt = $pdo->prepare("UPDATE cancha SET nombre = ?, lugar = ?, bio = ?, foto = ? WHERE id_cancha = ?");
+                    $stmt->execute([$nombre, $lugar, $bio, $foto, $id]);
+                } else {
+                    $stmt = $pdo->prepare("UPDATE cancha SET nombre = ?, lugar = ?, bio = ? WHERE id_cancha = ?");
+                    $stmt->execute([$nombre, $lugar, $bio, $id]);
+                }
 
                 $_SESSION['msgOk'] = "Cancha editada correctamente.";
                 header("Location: ".$_SERVER['PHP_SELF']);
@@ -125,12 +151,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['accion'] === 'editar') { //
     <meta charset="UTF-8">
     <title>Listado de canchas</title>
 </head>
-<body>
+<body>    
     <?php if ($misFavoritos): ?>
     <h1>Mis Favoritos</h1>
     <ul>
         <?php foreach ($misFavoritos as $cancha): ?>
-            <li><?= htmlspecialchars($cancha['nombre']) ?> - <?= htmlspecialchars($cancha['lugar']) ?> - <?= htmlspecialchars($cancha['bio']) ?> <a href="detalle_cancha.php?id=<?= $cancha['id_cancha'] ?>" 
+            <li><?= htmlspecialchars($cancha['nombre']) ?> - <?= htmlspecialchars($cancha['lugar']) ?> - <?= htmlspecialchars($cancha['bio']) ?><?php if ($cancha['foto']): ?>
+                            <br><img src="uploads/<?= htmlspecialchars($cancha['foto']) ?>" width="100" height="60">
+                        <?php endif; ?> <a href="calendario.php?id=<?= $cancha['id_cancha'] ?>"
+             
                     style="background: #000000ff; color: white; padding: 5px 10px; text-decoration: none; border-radius: 3px;">
                     Ver Detalles
                     </a>
@@ -153,7 +182,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['accion'] === 'editar') { //
                     <strong><?php echo htmlspecialchars($cancha['nombre']); ?></strong>  <!--Muestra las variables q queremos-->
                     - Ubicación: <?php echo htmlspecialchars($cancha['lugar']); ?>
                      - Descipcion: <?php echo htmlspecialchars($cancha['bio']); ?>
-                    <a href="detalle_cancha.php?id=<?= $cancha['id_cancha'] ?>" 
+                     <?php if ($cancha['foto']): ?>
+                            <br><img src="uploads/<?= htmlspecialchars($cancha['foto']) ?>" width="100" height="60">
+                        <?php endif; ?>
+                    <a href="calendario.php?id=<?= $cancha['id_cancha'] ?>" 
                     style="background: #000000ff; color: white; padding: 5px 10px; text-decoration: none; border-radius: 3px;">
                         Ver Detalles
                     </a>
@@ -212,18 +244,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['accion'] === 'editar') { //
                         '<?= $cancha['id_cancha'] ?>',
                         '<?= htmlspecialchars($cancha['nombre']) ?>',
                         '<?= htmlspecialchars($cancha['lugar']) ?>',
-                        '<?= htmlspecialchars($cancha['bio']) ?>'
+                        '<?= htmlspecialchars($cancha['bio']) ?>',
+                        '<?= htmlspecialchars($cancha['foto']) ?>'
                         )">Editar</button>
 
                         <!--POPUP PARA EDITAR CANCHA-->
                         <div id="modalEditar" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5);">
                         <div style="background:#fff; padding:20px; margin:10% auto; width:300px; border-radius:10px;">
                             <h2>Editar Cancha</h2>
-                            <form method="post">
+                            <form method="post" enctype="multipart/form-data">
                             <input type="hidden" name="id_cancha" id="edit_id">
                             <input type="text" name="nombre" id="edit_nombre" required><br><br>
                             <input type="text" name="lugar" id="edit_lugar" required><br><br>
                             <input type="text" name="bio" id="edit_bio" required><br><br>
+                            <input type="file" name="foto" id="edit_foto"><br><br>
                             <button type="submit" name="accion" value="editar">Guardar</button>
                             <button type="button" onclick="cerrarModal()">Cancelar</button>
                             </form>
@@ -233,12 +267,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['accion'] === 'editar') { //
 
                         <!--SCRIPT PARA EL POPUP-->
                         <script>
-                        function abrirModal(id, nombre, lugar, bio) {
+                        function abrirModal(id, nombre, lugar, bio, foto) {
                         document.getElementById('modalEditar').style.display = 'block';
                         document.getElementById('edit_id').value = id;
                         document.getElementById('edit_nombre').value = nombre;
                         document.getElementById('edit_lugar').value = lugar;
                         document.getElementById('edit_bio').value = bio;
+                        document.getElementById('edit_foto').value = foto;
                         }
                         function cerrarModal() {
                         document.getElementById('modalEditar').style.display = 'none';

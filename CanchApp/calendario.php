@@ -95,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reserva_rapida'])) {
                 // Verificar si ya existe una reserva en ese horario (comprobación por solapamiento)
                 $stmt = $pdo->prepare("
                     SELECT COUNT(*) FROM reserva 
-                    WHERE id_cancha = ? AND fecha = ? 
+                    WHERE id_cancha = ? AND fecha = ? AND estado = 'activa'
                     AND (
                         (hora_inicio <= ? AND hora_final > ?) 
                         OR
@@ -114,12 +114,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reserva_rapida'])) {
                 if ($stmt->fetchColumn() > 0) {
                     $error = "Ya existe una reserva en ese horario.";
                 } else {
+
+                    $codigo_reserva = rand(100000, 999999);
+
                     // Crear la reserva
                     $stmt = $pdo->prepare("
-                        INSERT INTO reserva (fecha, hora_inicio, hora_final, id_usuario, id_cancha) 
-                        VALUES (?, ?, ?, ?, ?)
+                        INSERT INTO reserva (fecha, hora_inicio, hora_final, id_usuario, id_cancha, codigo_reserva) 
+                        VALUES (?, ?, ?, ?, ?, ?)
                     ");
-                    $stmt->execute([$fecha, $hora_inicio, $hora_final, $id_usuario, $id_cancha_reserva]);
+                    $stmt->execute([$fecha, $hora_inicio, $hora_final, $id_usuario, $id_cancha_reserva, $codigo_reserva]);
                     
                     // Obtener el nombre de la cancha para el mensaje
                     $stmt = $pdo->prepare("SELECT nombre FROM cancha WHERE id_cancha = ?");
@@ -129,7 +132,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reserva_rapida'])) {
                     $msg = "¡Reserva realizada! 🎉<br>
                            <strong>{$nombre_cancha}</strong><br>
                             " . date('d/m/Y', strtotime($fecha)) . "<br>
-                            {$hora_inicio} - {$hora_final}";
+                            {$hora_inicio} - {$hora_final}<br>
+                            <b>Código de reserva: {$codigo_reserva}</b>";
                 }
             } catch (PDOException $e) {
                 $error = "Error al procesar la reserva: " . $e->getMessage();

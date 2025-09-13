@@ -1,4 +1,4 @@
-Files "*.php">
+<Files "*.php">
     Order Deny,Allow
     Deny from All
 </Files>

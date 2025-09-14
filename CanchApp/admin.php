@@ -26,9 +26,9 @@ try {
 
             // Se pasam datos del usuario a la tabla duenio.
             $stmt2 = $pdo->prepare("
-                INSERT INTO duenio (id_usuario, nombre, email, contrasena)
-                SELECT id_usuario, nombre, email, contrasena 
-                FROM usuario WHERE id_usuario = ?
+            INSERT INTO duenio (id_usuario, nombre, email, contrasena)
+            SELECT id_usuario, nombre, email, contrasena 
+            FROM usuario WHERE id_usuario = ?
             ");
             $stmt2->execute([$usuarioId]); //Lo mismo q arriba, este id es del usuario pero se realiza asi para evitra inyecciones.
 

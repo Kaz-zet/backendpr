@@ -31,16 +31,14 @@ if ($id_cancha) {
             exit;
         }
         
-        $canchas = [$cancha]; //Se convierten las canchas en array asi no hay ningun problema de compatibilidad.
+        $canchas = [$cancha];
         
     } catch (PDOException $e) {
         $error = "Error al cargar la cancha: " . $e->getMessage();
         $canchas = [];
     }
 } else {
-   
-
-//------------------------------------------BUSCA CANCHAS-----------------------------------------------
+    //------------------------------------------BUSCA CANCHAS-----------------------------------------------
     $buscar = $_GET['buscar'] ?? '';
     
     try {
@@ -64,7 +62,7 @@ if ($id_cancha) {
     }
 }
 
-//Saca reservas de una hora y fecha especifica.
+//FUNCIÓN CORREGIDA: Obtiene reservas y calcula espacios ocupados por horario
 function obtenerreservas($pdo, $id_cancha, $fecha) {
     $stmt = $pdo->prepare("
         SELECT r.*, u.nombre as usuario_nombre 
@@ -77,6 +75,34 @@ function obtenerreservas($pdo, $id_cancha, $fecha) {
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
+//NUEVA FUNCIÓN: Calcula espacios ocupados por horario específico
+function obtenerEspaciosOcupados($reservas, $hora) {
+    $espacios_ocupados = 0;
+    $reservas_en_horario = [];
+    $hora_fin = date('H:i', strtotime($hora . ' +1 hour'));
+    
+    foreach ($reservas as $reserva) {
+        $r_inicio = substr($reserva['hora_inicio'], 0, 5);
+        $r_final  = substr($reserva['hora_final'], 0, 5);
+
+        // Verificar si hay solapamiento de horarios
+        if (
+            ($hora >= $r_inicio && $hora < $r_final) ||
+            ($hora_fin > $r_inicio && $hora_fin <= $r_final) ||
+            ($hora <= $r_inicio && $hora_fin >= $r_final)
+        ) {
+            $espacios_ocupados += (int)($reserva['espacios_reservados'] ?? 1);
+            $reservas_en_horario[] = $reserva;
+        }
+    }
+    
+    return [
+        'espacios_ocupados' => $espacios_ocupados,
+        'espacios_disponibles' => 4 - $espacios_ocupados,
+        'reservas' => $reservas_en_horario
+    ];
+}
+
 //----------------------------------SE GENERAN HORARIOS DISPONIBLES-----------------------------------------
 function generarhorarios() {
     $horarios = [];
@@ -86,39 +112,61 @@ function generarhorarios() {
     return $horarios;
 }
 
-//Revisamos si el horario está ocupado y si ya pasó.
-function estaocupado($reservas, $hora, $fecha_mostrar) {
-    $hora_fin = date('H:i', strtotime($hora . ' +1 hour'));
-
-    foreach ($reservas as $reserva) {
-        $r_inicio = substr($reserva['hora_inicio'], 0, 5);
-        $r_final  = substr($reserva['hora_final'], 0, 5);
-
-        if (
-            ($hora >= $r_inicio && $hora < $r_final) ||
-            ($hora_fin > $r_inicio && $hora_fin <= $r_final) ||
-            ($hora <= $r_inicio && $hora_fin >= $r_final)
-        ) {
-            // Mostrar información de ocupación con jugadores
-            $jugadores_info = $reserva['jugadores_confirmados'] ?? 1;
-            return array_merge($reserva, [
-                'tipo' => 'ocupada',
-                'info_jugadores' => "({$jugadores_info}/4 jugadores)"
-            ]);
-        }
-    }
-
-    //Si la fecha es HOY, fijamos si la hora ya pasó.
+//FUNCIÓN CORREGIDA: Verifica estado del horario (disponible, parcialmente ocupado, completo, pasado)
+function obtenerEstadoHorario($reservas, $hora, $fecha_mostrar) {
+    // Si la fecha es HOY, verificar si la hora ya pasó
     if ($fecha_mostrar === date('Y-m-d')) {
         $hora_actual_ts = strtotime(date('Y-m-d H:i'));
         $hora_slot_ts   = strtotime($fecha_mostrar . ' ' . $hora);
 
         if ($hora_slot_ts <= $hora_actual_ts) {
-            return ['usuario_nombre' => 'Hora pasada', 'tipo' => 'pasada'];
+            return [
+                'tipo' => 'pasado',
+                'mensaje' => 'Hora pasada',
+                'espacios_disponibles' => 0
+            ];
         }
     }
-
-    return false;
+    
+    $info_espacios = obtenerEspaciosOcupados($reservas, $hora);
+    $espacios_ocupados = $info_espacios['espacios_ocupados'];
+    $espacios_disponibles = $info_espacios['espacios_disponibles'];
+    
+    if ($espacios_ocupados === 0) {
+        // Completamente disponible
+        return [
+            'tipo' => 'disponible',
+            'mensaje' => 'Disponible',
+            'espacios_disponibles' => 4,
+            'info_espacios' => '4 espacios libres'
+        ];
+    } elseif ($espacios_ocupados >= 4) {
+        // Completamente ocupado
+        $reservas_info = [];
+        foreach ($info_espacios['reservas'] as $reserva) {
+            $reservas_info[] = $reserva['usuario_nombre'];
+        }
+        return [
+            'tipo' => 'completo',
+            'mensaje' => 'Cancha completa',
+            'espacios_disponibles' => 0,
+            'info_espacios' => '4/4 espacios ocupados',
+            'usuarios' => $reservas_info
+        ];
+    } else {
+        // Parcialmente ocupado
+        $reservas_info = [];
+        foreach ($info_espacios['reservas'] as $reserva) {
+            $reservas_info[] = $reserva['usuario_nombre'] . ' (' . $reserva['espacios_reservados'] . ' espacios)';
+        }
+        return [
+            'tipo' => 'parcial',
+            'mensaje' => 'Parcialmente ocupado',
+            'espacios_disponibles' => $espacios_disponibles,
+            'info_espacios' => "{$espacios_ocupados}/4 espacios ocupados",
+            'usuarios' => $reservas_info
+        ];
+    }
 }
 
 //SE PASA DE INGLÉS DEFAULT A ESPAÑOL
@@ -146,25 +194,25 @@ $horarios = generarhorarios();
     <title><?= $id_cancha && !empty($canchas) ? htmlspecialchars($canchas[0]['nombre']) . ' - Reservas' : 'Calendario de Reservas' ?></title>
     <link rel="stylesheet" href="css/calendario.css">
     <style>
-        /* Estilos adicionales para mostrar información de jugadores */
-        .horario-slot.ocupado {
-            background: linear-gradient(135deg, #ff6b6b, #ff8e8e);
-            color: white;
-            cursor: not-allowed;
+        /* ESTILOS CORREGIDOS PARA MOSTRAR DIFERENTES ESTADOS */
+        .horario-slot {
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
             position: relative;
+            min-height: 70px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
         }
         
-        .horario-slot.ocupado .jugadores-info {
-            font-size: 11px;
-            opacity: 0.9;
-            margin-top: 2px;
-        }
-        
+        /* Completamente disponible */
         .horario-slot.disponible {
             background: linear-gradient(135deg, #51cf66, #69db7c);
             color: white;
             cursor: pointer;
-            transition: all 0.3s ease;
         }
         
         .horario-slot.disponible:hover {
@@ -173,10 +221,50 @@ $horarios = generarhorarios();
             background: linear-gradient(135deg, #40c057, #51cf66);
         }
         
+        /* Parcialmente ocupado - NUEVO */
+        .horario-slot.parcial {
+            background: linear-gradient(135deg, #ffd43b, #fab005);
+            color: #000;
+            cursor: pointer;
+            border: 2px solid #fd7e14;
+        }
+        
+        .horario-slot.parcial:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(253, 126, 20, 0.3);
+            background: linear-gradient(135deg, #fab005, #fd7e14);
+            color: white;
+        }
+        
+        /* Completamente ocupado */
+        .horario-slot.completo {
+            background: linear-gradient(135deg, #ff6b6b, #ff8e8e);
+            color: white;
+            cursor: not-allowed;
+        }
+        
+        /* Hora pasada */
         .horario-slot.pasado {
             background: #868e96;
             color: white;
             cursor: not-allowed;
+        }
+        
+        .slot-hora {
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 4px;
+        }
+        
+        .slot-info {
+            font-size: 11px;
+            opacity: 0.9;
+        }
+        
+        .espacios-info {
+            font-size: 10px;
+            margin-top: 2px;
+            font-weight: bold;
         }
         
         .reserva-btn {
@@ -187,26 +275,48 @@ $horarios = generarhorarios();
             color: inherit;
             font-size: inherit;
             cursor: pointer;
-            padding: 8px;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
+            text-decoration: none;
         }
         
-        .slot-hora {
-            font-weight: bold;
-            margin-bottom: 2px;
+        /* Tooltip para mostrar usuarios */
+        .horario-slot[title] {
+            position: relative;
         }
         
-        .slot-disponible {
-            font-size: 10px;
-            opacity: 0.9;
+        /* Leyenda de colores */
+        .leyenda {
+            display: flex;
+            gap: 15px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+            justify-content: center;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
         }
+        
+        .leyenda-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+        
+        .leyenda-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+        
+        .color-disponible { background: linear-gradient(135deg, #51cf66, #69db7c); }
+        .color-parcial { background: linear-gradient(135deg, #ffd43b, #fab005); }
+        .color-completo { background: linear-gradient(135deg, #ff6b6b, #ff8e8e); }
+        .color-pasado { background: #868e96; }
     </style>
-
-
-
 </head>
 <body>
     <div class="container">
@@ -219,8 +329,6 @@ $horarios = generarhorarios();
         <?php endif; ?>
         
         <?php if (!$id_cancha): ?>
-
-
         <!--BUSCAR CANCHA--------------------------------------------------------------------------------->
         <div class="busqueda">
             <h3>Buscar Canchas</h3>
@@ -246,7 +354,6 @@ $horarios = generarhorarios();
         </div>
         <?php else: ?>
 
-
         <!--CANCHA ESPECIFICA POR ID DE CANCHA.PHP -->
         <?php if (!empty($canchas)): ?>
         <div class="cancha-info">
@@ -270,7 +377,7 @@ $horarios = generarhorarios();
                 <strong>Descripción:</strong> <?= htmlspecialchars($canchas[0]['bio']) ?>
             </div>
             <div class="info-item" style="background: #e3f2fd; padding: 10px; border-radius: 5px; margin: 10px 0;">
-                <strong> Cancha de Padel - Máximo 4 jugadores por reserva</strong>
+                <strong>🎾 Cancha de Padel - Máximo 4 jugadores por reserva</strong>
             </div>
         </div>
         <?php endif; ?>
@@ -282,14 +389,13 @@ $horarios = generarhorarios();
             </div>
         <?php endif; ?>
             
-        <!--Con esto podemos ver las fechas para reservar, ya existe, invocamos un calendario---------------------------------------------->
+        <!--CALENDARIO CON FECHAS---------------------------------------------->
         <div class="fecha-selector">
             <h3>Selecciona el día</h3>
             <p><strong>Mostrando: <?= date('d/m/Y', strtotime($fecha_mostrar)) ?></strong></p>
             
             <div class="fecha-botones">
                 <?php
-                //Con esto generamos los botones para los proximos siete dias incluyendo el día de hoy. Esto se actualiza con horario real.
                 for ($i = 0; $i < 7; $i++) {
                     $fecha_btn = date('Y-m-d', strtotime("+$i days"));
                     $fecha_texto = date('d/m', strtotime("+$i days"));
@@ -297,7 +403,6 @@ $horarios = generarhorarios();
                     $dia_semana = diasespanol($dia_semana_ingles);
                     $clase_activo = ($fecha_btn == $fecha_mostrar) ? 'activo' : '';
                     
-                    //Vemos la ID de la cancha en la URL (Se puede sacar).
                     $url_params = "fecha={$fecha_btn}";
                     if ($id_cancha) {
                         $url_params .= "&id={$id_cancha}";
@@ -313,7 +418,6 @@ $horarios = generarhorarios();
                 ?>
             </div>
             
-            <!--Calendario!!! -->
             <div style="margin-top: 15px;">
                 <form method="get" style="display: inline-block;">
                     <?php if ($id_cancha): ?>
@@ -328,7 +432,26 @@ $horarios = generarhorarios();
             </div>
         </div>
         
-        <!-- No entiendo xd----------------------------->
+        <!-- LEYENDA DE COLORES -->
+        <div class="leyenda">
+            <div class="leyenda-item">
+                <div class="leyenda-color color-disponible"></div>
+                <span>Disponible (4 espacios libres)</span>
+            </div>
+            <div class="leyenda-item">
+                <div class="leyenda-color color-parcial"></div>
+                <span>Parcialmente ocupado (puedes unirte)</span>
+            </div>
+            <div class="leyenda-item">
+                <div class="leyenda-color color-completo"></div>
+                <span>Cancha completa (4/4 ocupado)</span>
+            </div>
+            <div class="leyenda-item">
+                <div class="leyenda-color color-pasado"></div>
+                <span>Hora pasada</span>
+            </div>
+        </div>
+        
         <h2><?= $id_usuario ? 'Haz clic para reservar' : 'Horarios disponibles' ?></h2>
         
         <?php if (!empty($canchas)): ?>
@@ -338,47 +461,47 @@ $horarios = generarhorarios();
                     <div class="cancha-card" data-nombre="<?= strtolower(htmlspecialchars($cancha['nombre'])) ?>" data-lugar="<?= strtolower(htmlspecialchars($cancha['lugar'])) ?>">
                         <div class="cancha-header">
                             <h3><?= htmlspecialchars($cancha['nombre']) ?></h3>
-                            <p style="margin: 5px 0; font-size: 14px;"> <?= htmlspecialchars($cancha['lugar']) ?></p>
+                            <p style="margin: 5px 0; font-size: 14px;">📍 <?= htmlspecialchars($cancha['lugar']) ?></p>
                         </div>
                         
                         <div class="horario-grid">
                             <?php foreach ($horarios as $hora): ?>
                                 <?php 
-                                $ocupado = estaocupado($reservas, $hora, $fecha_mostrar);
+                                $estado = obtenerEstadoHorario($reservas, $hora, $fecha_mostrar);
                                 $hora_fin = date('H:i', strtotime($hora . ' +1 hour'));
+                                
+                                // Crear tooltip con información detallada
+                                $tooltip = "Horario: {$hora} - {$hora_fin}\\n";
+                                $tooltip .= "Estado: {$estado['mensaje']}\\n";
+                                $tooltip .= "Espacios disponibles: {$estado['espacios_disponibles']}/4";
+                                
+                                if (isset($estado['usuarios']) && !empty($estado['usuarios'])) {
+                                    $tooltip .= "\\nReservado por: " . implode(', ', $estado['usuarios']);
+                                }
                                 ?>
                                 
-                                <?php if ($ocupado): ?>
-                                    <?php if ($ocupado['tipo'] === 'pasada'): ?>
-                                        <div class="horario-slot pasado" title="Esta hora ya pasó">
-                                            <div class="slot-hora"><?= $hora ?></div>
-                                            <div class="slot-disponible">Hora pasada</div>
-                                        </div>
-                                    <?php else: ?>
-                                        <div class="horario-slot ocupado" title="Ocupado por <?= htmlspecialchars($ocupado['usuario_nombre']) ?>">
-                                            <div class="slot-hora"><?= $hora ?></div>
-                                            <div class="jugadores-info">
-                                                <?= $ocupado['info_espacios'] ?? 'Ocupado' ?>
-                                            </div>
-                                        </div>
-                                    <?php endif; ?>
-                                <?php else: ?>
-                                    <?php if ($id_usuario): ?>
-                                        <div class="horario-slot disponible">
-                                            <a href="reserva_modal.php?id_cancha=<?= $cancha['id_cancha'] ?>&fecha=<?= $fecha_mostrar ?>&hora_inicio=<?= $hora ?>" 
-                                               class="reserva-btn"
-                                               title="Reservar <?= $hora ?> - <?= $hora_fin ?>">
+                                <div class="horario-slot <?= $estado['tipo'] ?>" title="<?= htmlspecialchars($tooltip) ?>">
+                                    <?php if ($estado['tipo'] === 'disponible' || $estado['tipo'] === 'parcial'): ?>
+                                        <?php if ($id_usuario): ?>
+                                            <a href="reserva_modal.php?id_cancha=<?= $cancha['id_cancha'] ?>&fecha=<?= $fecha_mostrar ?>&hora_inicio=<?= $hora ?>&espacios_disponibles=<?= $estado['espacios_disponibles'] ?>" 
+                                               class="reserva-btn">
                                                 <div class="slot-hora"><?= $hora ?></div>
-                                                <div class="slot-disponible">Disponible</div>
+                                                <div class="slot-info"><?= $estado['mensaje'] ?></div>
+                                                <div class="espacios-info"><?= $estado['info_espacios'] ?></div>
                                             </a>
-                                        </div>
-                                    <?php else: ?>
-                                        <div class="horario-slot disponible" title="Disponible - <?= $hora ?> - <?= $hora_fin ?>">
+                                        <?php else: ?>
                                             <div class="slot-hora"><?= $hora ?></div>
-                                            <div class="slot-disponible">Disponible</div>
-                                        </div>
+                                            <div class="slot-info"><?= $estado['mensaje'] ?></div>
+                                            <div class="espacios-info"><?= $estado['info_espacios'] ?></div>
+                                        <?php endif; ?>
+                                    <?php else: ?>
+                                        <div class="slot-hora"><?= $hora ?></div>
+                                        <div class="slot-info"><?= $estado['mensaje'] ?></div>
+                                        <?php if (isset($estado['info_espacios'])): ?>
+                                            <div class="espacios-info"><?= $estado['info_espacios'] ?></div>
+                                        <?php endif; ?>
                                     <?php endif; ?>
-                                <?php endif; ?>
+                                </div>
                             <?php endforeach; ?>
                         </div>
                     </div>

@@ -4,7 +4,7 @@ require_once 'conexiones/conDB.php';
 
 // Solo usuarios pueden ver su perfil
 if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'usuario') {
-    die("Solo los usuarios pueden ver su perfil."); //Unicamente usuarios pueden ver el perfil.
+    die("Solo los usuarios pueden ver su perfil.");
 }
 
 $id_usuario = $_SESSION['id'];
@@ -49,10 +49,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cancelar_reserva'])) 
                     $stmt = $pdo->prepare("UPDATE reserva SET estado = 'cancelada' WHERE id_reserva = ?");
                     $stmt->execute([$id_reserva]);
                     
-                    // Eliminar jugadores asociados
-                    $stmt = $pdo->prepare("DELETE FROM reserva_jugadores WHERE id_reserva = ?");
-                    $stmt->execute([$id_reserva]);
-                    
                     $msg = "Reserva cancelada exitosamente. Código: " . $reserva['codigo_reserva'];
                 } else {
                     $error = "No puedes cancelar una reserva que ya comenzó o pasó.";
@@ -66,13 +62,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cancelar_reserva'])) 
     }
 }
 
-//Actualizar perfil. Acá podemos actualizarlo como queramos.
+//Actualizar perfil
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['actualizar_perfil'])) {
     $nombre = trim($_POST['nombre'] ?? '');
     $email = trim($_POST['email'] ?? '');
-    $contrasena_nueva = $_POST['contrasena_nueva'] ?? ''; //Se crean contrananueva y actual para mas adelante determinar la foto de perdil.
+    $contrasena_nueva = $_POST['contrasena_nueva'] ?? '';
     $contrasena_actual = $_POST['contrasena_actual'] ?? '';
-    $foto_actual = $usuario['foto']; //Se mantiene la foto actual y cualquier cosa creamos la variable foto nueva que pasa  ser foto actual cuando foto actual se cambia.
+    $foto_actual = $usuario['foto'];
     $foto_nueva = null;
 
     //Se validan nombre y email.
@@ -103,7 +99,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['actualizar_perfil']))
                         $error = 'El archivo es muy grande. Máximo 5MB.';
                     } else {
                         //Crea una carpeta en la carpeta Uploads donde se guardan las fotos de los usuarios.
-                        //Esta se crea en caso de que no exista.
                         if (!file_exists('uploads/usuarios')) {
                             mkdir('uploads/usuarios', 0777, true);
                         }
@@ -113,7 +108,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['actualizar_perfil']))
                             unlink('uploads/usuarios/' . $foto_actual);
                         }
                         
-
                         //Para subir foto nueva.
                         $extension = pathinfo($_FILES['foto']['name'], PATHINFO_EXTENSION);
                         $filename = 'usuario_' . $id_usuario . '_' . time() . '.' . $extension;
@@ -127,13 +121,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['actualizar_perfil']))
                     }
                 }
 
-
                 //--------------------------ACTUALIZAR PERFIL-------------------------------------------------
                 
                 //Si no hay ningún error, se actualiza.
                 if (empty($error)) {
                     try {
-                        //Determina que foto usar-.
+                        //Determina que foto usar.
                         $foto_final = $foto_nueva ?: $foto_actual;
                         
                         //Se determina que contraseña usar, si la contraseña nueva está vacía usa la anterior, sino usa la nueva.
@@ -173,7 +166,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['actualizar_perfil']))
     }
 }
 
-//--------------------------------------------------------------HISTORIAL DE RESERVAS--------------------------------------
+//--------------------------------------------------------------HISTORIAL DE RESERVAS CORREGIDO--------------------------------------
 try {
     $stmt = $pdo->prepare("
         SELECT 
@@ -182,8 +175,7 @@ try {
             r.fecha,
             r.hora_inicio,
             r.hora_final,
-            r.jugadores_confirmados,
-            r.max_jugadores,
+            r.espacios_reservados,
             r.telefono,
             r.observaciones,
             r.estado,
@@ -218,24 +210,26 @@ try {
     <title>Mi Perfil - <?= htmlspecialchars($usuario['nombre']) ?></title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 20px;
-            background-color: #f5f5f5;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
         }
         .container {
-            max-width: 1000px;
+            max-width: 1200px;
             margin: 0 auto;
             background: white;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-radius: 20px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
             overflow: hidden;
         }
         .header {
-            color: black;
-            padding: 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
             text-align: center;
         }
-        .profile-photo { /*No se toca!!*/ 
+        .profile-photo {
             width: 120px;
             height: 120px;
             border-radius: 50%;
@@ -243,8 +237,9 @@ try {
             border: 4px solid white;
             object-fit: cover;
             display: block;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
         }
-        .profile-photo-placeholder { /*No se toca!!*/ 
+        .profile-photo-placeholder {
             width: 120px;
             height: 120px;
             border-radius: 50%;
@@ -255,58 +250,92 @@ try {
             align-items: center;
             justify-content: center;
             font-size: 48px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+        }
+        .header h1 {
+            margin: 0 0 10px 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        .header p {
+            margin: 0;
+            opacity: 0.9;
+            font-size: 1.2em;
         }
         .content {
-            padding: 30px;
+            padding: 40px;
         }
         .section {
             margin-bottom: 40px;
         }
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 25px;
         }
         .form-group label {
             display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
+            margin-bottom: 8px;
+            font-weight: 600;
             color: #333;
+            font-size: 16px;
         }
         .form-group input {
             width: 100%;
-            padding: 12px;
-            border: 2px solid #ddd;
-            border-radius: 6px;
+            padding: 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
             font-size: 16px;
             box-sizing: border-box;
+            transition: border-color 0.3s;
         }
         .form-group input:focus {
-            border-color: #000000ff;
+            border-color: #667eea;
             outline: none;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .form-group small {
+            display: block;
+            margin-top: 5px;
+            color: #6c757d;
+            font-size: 14px;
         }
         .btn {
-            background: #000000ff;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 12px 25px;
+            padding: 15px 30px;
             border: none;
-            border-radius: 6px;
+            border-radius: 10px;
             cursor: pointer;
             font-size: 16px;
+            font-weight: 600;
             text-decoration: none;
             display: inline-block;
+            transition: all 0.3s;
         }
         .btn:hover {
-            background: #000000ff;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
         }
         .btn-secondary {
             background: #6c757d;
         }
         .btn-secondary:hover {
             background: #545b62;
+            box-shadow: 0 8px 20px rgba(108, 117, 125, 0.3);
+        }
+        .btn-danger {
+            background: #dc3545;
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+        .btn-danger:hover {
+            background: #c82333;
+            box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
         }
         .mensaje {
-            padding: 15px;
-            border-radius: 6px;
-            margin-bottom: 20px;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 25px;
+            font-weight: 500;
         }
         .success {
             background: #d4edda;
@@ -321,26 +350,39 @@ try {
         .reservas-table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 20px;
+            margin-top: 25px;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
         .reservas-table th,
         .reservas-table td {
-            padding: 12px;
+            padding: 18px 15px;
             text-align: left;
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid #e9ecef;
         }
         .reservas-table th {
-            background-color: #f8f9fa;
-            font-weight: bold;
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
         .reservas-table tr:hover {
             background-color: #f8f9fa;
         }
+        .reservas-table tr:last-child td {
+            border-bottom: none;
+        }
         .estado-badge {
-            padding: 4px 8px;
-            border-radius: 4px;
+            padding: 6px 12px;
+            border-radius: 20px;
             font-size: 12px;
             font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
         .estado-hoy {
             background: #fff3cd;
@@ -351,65 +393,122 @@ try {
             color: #0c5460;
         }
         .estado-pasada {
+            background: #d4edda;
+            color: #155724;
+        }
+        .estado-cancelada {
             background: #f8d7da;
             color: #721c24;
         }
         .tabs {
             display: flex;
-            border-bottom: 2px solid #ddd;
-            margin-bottom: 20px;
+            border-bottom: 2px solid #e9ecef;
+            margin-bottom: 30px;
         }
         .tab {
-            padding: 15px 25px;
+            padding: 18px 30px;
             background: #f8f9fa;
             border: none;
             cursor: pointer;
             font-size: 16px;
+            font-weight: 600;
             margin-right: 5px;
+            border-radius: 10px 10px 0 0;
+            transition: all 0.3s;
         }
         .tab.active {
-            background: #000000ff;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
+        }
+        .tab:not(.active):hover {
+            background: #e9ecef;
         }
         .tab-content {
             display: none;
         }
         .tab-content.active {
             display: block;
+            animation: fadeIn 0.3s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 20px;
-            margin-bottom: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
         }
         .stat-card {
-            background: #f8f9fa;
-            padding: 20px;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            padding: 30px 25px;
             text-align: center;
-            border-radius: 8px;
-            border-left: 4px solid #030303ff; /*Color de las cartas*/ 
+            border-radius: 15px;
+            border-left: 5px solid #667eea;
+            transition: transform 0.3s;
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
         }
         .stat-number {
-            font-size: 24px;
+            font-size: 2.5em;
             font-weight: bold;
-            color: #000000ff; /*Color del número*/ 
+            color: #667eea;
+            margin-bottom: 10px;
         }
         .stat-label {
-            color: #666;
+            color: #6c757d;
+            font-weight: 500;
+            text-transform: uppercase;
+            font-size: 14px;
+            letter-spacing: 0.5px;
+        }
+        .codigo-reserva {
+            background: linear-gradient(135deg, #28a745, #20c997);
+            color: white;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .espacios-info {
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: bold;
+            display: inline-block;
             margin-top: 5px;
         }
+        .no-reservas {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+        }
+        .no-reservas h3 {
+            color: #495057;
+            margin-bottom: 15px;
+            font-size: 1.8em;
+        }
+        .no-reservas p {
+            font-size: 1.1em;
+            margin-bottom: 25px;
+        }
     </style>
-
 </head>
 <body>
     <div class="container">
-        <div class="header"> <!--Header con foto del usuario-->
+        <div class="header">
             <?php if (!empty($usuario['foto'])): ?>
                 <img src="uploads/usuarios/<?= htmlspecialchars($usuario['foto']) ?>" 
                      alt="Foto de perfil" class="profile-photo">
             <?php else: ?>
-                <div class="profile-photo-placeholder"> <!--Si no tiene se pone una foto default.-->
+                <div class="profile-photo-placeholder">
                     👤
                 </div>
             <?php endif; ?>
@@ -417,7 +516,7 @@ try {
             <p><?= htmlspecialchars($usuario['email']) ?></p>
         </div>
         
-        <div class="content"> <!--MENSAJES DE ERROR O SUCCESS.-->
+        <div class="content">
             <?php if (!empty($msg)): ?>
                 <div class="mensaje success"><?= htmlspecialchars($msg) ?></div>
             <?php endif; ?>
@@ -426,70 +525,66 @@ try {
                 <div class="mensaje error"><?= htmlspecialchars($error) ?></div>
             <?php endif; ?>
 
-            
-            <!--TABSS!!----------------------------------------------------------------------------->
+            <!-- TABS -->
             <div class="tabs">
-                <button class="tab active" onclick="showTab('perfil')">Mi Perfil</button>
-                <button class="tab" onclick="showTab('reservas')">Historial</button>
+                <button class="tab active" onclick="showTab('perfil')">✏️ Mi Perfil</button>
+                <button class="tab" onclick="showTab('reservas')">📋 Mis Reservas</button>
             </div>
             
-            <!--TAB PERFIL----------------------------------------------------------------------------->
+            <!-- TAB PERFIL -->
             <div id="perfil" class="tab-content active">
                 <div class="section">
                     <h2>Editar Perfil</h2>
                     <form method="post" enctype="multipart/form-data">
                         <div class="form-group">
-                            <label>Foto de Perfil:</label>
+                            <label>📸 Foto de Perfil:</label>
                             <input type="file" name="foto" accept="image/*">
-                            <small style="color: #666;">Formatos: JPG, JPEG, PNG. Máximo 5MB.</small>
+                            <small>Formatos: JPG, JPEG, PNG. Máximo 5MB.</small>
                         </div>
                         
                         <div class="form-group">
-                            <label>Nombre:</label>
+                            <label>👤 Nombre:</label>
                             <input type="text" name="nombre" value="<?= htmlspecialchars($usuario['nombre']) ?>" required>
                         </div>
                         
                         <div class="form-group">
-                            <label>Email:</label>
+                            <label>📧 Email:</label>
                             <input type="email" name="email" value="<?= htmlspecialchars($usuario['email']) ?>" required>
                         </div>
 
                         <div class="form-group">
-                            <label>Nueva Contraseña (opcional):</label>
+                            <label>🔒 Nueva Contraseña (opcional):</label>
                             <input type="password" name="contrasena_nueva" placeholder="Dejar vacío para mantener la actual">
-                            <small style="color: #666;">Mínimo 3 caracteres. Dejala vacía si no quieres cambiarla.</small>
+                            <small>Mínimo 3 caracteres. Déjala vacía si no quieres cambiarla.</small>
                         </div>
                         
                         <div class="form-group">
-                            <label>Contraseña Actual:</label>
+                            <label>🔐 Contraseña Actual:</label>
                             <input type="password" name="contrasena_actual" required>
-                            <small style="color: #666;">Ingresá tu contraseña actual para confirmar cualquier cambio!</small>
+                            <small>Ingresa tu contraseña actual para confirmar cualquier cambio.</small>
                         </div>
                         
-                        <button type="submit" name="actualizar_perfil" class="btn">Actualizar Perfil</button>
-                        <a href="index.php" class="btn btn-secondary">Volver al Inicio</a>
+                        <button type="submit" name="actualizar_perfil" class="btn">✅ Actualizar Perfil</button>
+                        <a href="index.php" class="btn btn-secondary">🏠 Volver al Inicio</a>
                     </form>
                 </div>
             </div>
 
-
-
-
-
-
-            
-            <!--TAB HISTORIAL---------------------------------------------------------------------------------------- -->
+            <!-- TAB HISTORIAL CORREGIDO -->
             <div id="reservas" class="tab-content">
                 <div class="section">
-                    <h2>Mi Historial de Reservas</h2>
+                    <h2>📋 Mi Historial de Reservas</h2>
                     
                     <?php
-                    // Calcular estadísticas (Si quieren saquenla pero está bueno)
+                    // Calcular estadísticas
                     $total_reservas = count($reservas);
                     $reservas_activas = count(array_filter($reservas, function($r) { return $r['estado'] === 'activa'; }));
                     $reservas_hoy = count(array_filter($reservas, function($r) { return $r['estado_calculado'] === 'hoy' && $r['estado'] === 'activa'; }));
                     $reservas_futuras = count(array_filter($reservas, function($r) { return $r['estado_calculado'] === 'futura' && $r['estado'] === 'activa'; }));
                     $reservas_canceladas = count(array_filter($reservas, function($r) { return $r['estado'] === 'cancelada'; }));
+                    
+                    // NUEVA ESTADÍSTICA: Total de espacios reservados
+                    $total_espacios = array_sum(array_column(array_filter($reservas, function($r) { return $r['estado'] === 'activa'; }), 'espacios_reservados'));
                     ?>  
                     
                     <div class="stats-grid">
@@ -506,29 +601,27 @@ try {
                             <div class="stat-label">Próximas</div>
                         </div>
                         <div class="stat-card">
+                            <div class="stat-number"><?= $total_espacios ?></div>
+                            <div class="stat-label">Espacios Reservados</div>
+                        </div>
+                        <div class="stat-card">
                             <div class="stat-number"><?= $reservas_canceladas ?></div>
                             <div class="stat-label">Canceladas</div>
                         </div>
                     </div>
 
-
-
-            <!--Acciones del usuario (anda muy raro)-->
-                    
                     <?php if (!empty($reservas)): ?>
-
-
-                    <!--Tabla------------------------------------------------------------------------>
                         <table class="reservas-table">
                             <thead>
                                 <tr>
-                                    <th>Fecha</th>
-                                    <th>Horario</th>
-                                    <th>Cancha</th>
-                                    <th>Ubicación</th>
-                                    <th>Estado</th>
-                                    <th>Código</th>
-                                    <th>Acciones</th>
+                                    <th>📅 Fecha</th>
+                                    <th>🕒 Horario</th>
+                                    <th>🎾 Cancha</th>
+                                    <th>📍 Ubicación</th>
+                                    <th>👥 Espacios</th>
+                                    <th>🔢 Código</th>
+                                    <th>📊 Estado</th>
+                                    <th>⚡ Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -537,45 +630,51 @@ try {
                                         <td>
                                             <strong><?= date('d/m/Y', strtotime($reserva['fecha'])) ?></strong><br>
                                             <small style="color: #666;">
-                                                <?php //Se pasan a español los días y se calcula la fecha.
+                                                <?php
                                                 $dias = ['Sunday' => 'Domingo', 'Monday' => 'Lunes', 'Tuesday' => 'Martes', 'Wednesday' => 'Miércoles', 'Thursday' => 'Jueves', 'Friday' => 'Viernes', 'Saturday' => 'Sábado'];
                                                 echo $dias[date('l', strtotime($reserva['fecha']))];
                                                 ?>
                                             </small>
                                         </td>
-
                                         <td>
-                                            <strong><?= substr($reserva['hora_inicio'], 0, 5) ?> - <?= substr($reserva['hora_final'], 0, 5) //Hora inicio y hora final de la cancha. ?></strong>
+                                            <strong><?= substr($reserva['hora_inicio'], 0, 5) ?> - <?= substr($reserva['hora_final'], 0, 5) ?></strong>
                                         </td>
-
                                         <td>
-                                            <strong><?= htmlspecialchars($reserva['cancha_nombre']) //Nombre de la cancha?></strong>
+                                            <strong><?= htmlspecialchars($reserva['cancha_nombre']) ?></strong>
                                         </td>
-
                                         <td>
-                                            <?= htmlspecialchars($reserva['cancha_lugar']) //Lugar de la cancha?>
+                                            <?= htmlspecialchars($reserva['cancha_lugar']) ?>
                                         </td>
-
                                         <td>
-
-                                            <?php //ESTADO DE LA RESERVA (ANDA RARO).
-                                            $estado_class = 'estado-' . $reserva['estado'];
+                                            <div class="espacios-info">
+                                                🎾 <?= $reserva['espacios_reservados'] ?>/4 espacios
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="codigo-reserva">
+                                                <?= htmlspecialchars($reserva['codigo_reserva']) ?>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <?php
+                                            $estado_final = $reserva['estado'] === 'cancelada' ? 'cancelada' : $reserva['estado_calculado'];
+                                            $estado_class = 'estado-' . $estado_final;
                                             $estado_text = [
-                                                'hoy' => 'HOY',
-                                                'futura' => 'PRÓXIMA',
-                                                'pasada' => 'COMPLETADA',
-                                                'cancelada' => 'CANCELADA'
-                                            ][$reserva['estado'] === 'cancelada' ? 'cancelada' : $reserva['estado_calculado']] ?? 'DESCONOCIDO';
+                                                'hoy' => '🔥 HOY',
+                                                'futura' => '⏳ PRÓXIMA',
+                                                'pasada' => '✅ COMPLETADA',
+                                                'cancelada' => '❌ CANCELADA'
+                                            ][$estado_final] ?? '❓ DESCONOCIDO';
                                             ?>
                                             <span class="estado-badge <?= $estado_class ?>"><?= $estado_text ?></span>
                                         </td>
                                         <td>
                                             <?php if ($reserva['estado'] === 'activa' && $reserva['estado_calculado'] === 'futura'): ?>
-                                                <form method="post" class="cancelar-form" 
-                                                      onsubmit="return confirm('¿Estás seguro de que quieres cancelar esta reserva?\n\nCódigo: <?= $reserva['codigo_reserva'] ?>\nFecha: <?= date('d/m/Y', strtotime($reserva['fecha'])) ?>\nHora: <?= substr($reserva['hora_inicio'], 0, 5) ?>');">
+                                                <form method="post" style="display: inline;" 
+                                                      onsubmit="return confirm('¿Estás seguro de que quieres cancelar esta reserva?\n\nCódigo: <?= $reserva['codigo_reserva'] ?>\nFecha: <?= date('d/m/Y', strtotime($reserva['fecha'])) ?>\nHora: <?= substr($reserva['hora_inicio'], 0, 5) ?>\nEspacios: <?= $reserva['espacios_reservados'] ?>/4');">
                                                     <input type="hidden" name="id_reserva" value="<?= $reserva['id_reserva'] ?>">
                                                     <button type="submit" name="cancelar_reserva" class="btn btn-danger">
-                                                         Cancelar
+                                                        ❌ Cancelar
                                                     </button>
                                                 </form>
                                             <?php elseif ($reserva['estado'] === 'activa' && ($reserva['estado_calculado'] === 'hoy' || $reserva['estado_calculado'] === 'pasada')): ?>
@@ -586,22 +685,14 @@ try {
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
-
                             </tbody>
-
                         </table>
-
-                         <!--Termina tabla-------------------------------------------------------------------------------------------->
                     <?php else: ?>
-                        <div style="text-align: center; padding: 40px; color: #666;">
-                            <h3>No tienes reservas todavía</h3>
-                            <p>¡Reserva tu rpimera cancha!!!</p>
-                            <a href="cancha.php" class="btn">Ver Canchas Disponibles</a>
+                        <div class="no-reservas">
+                            <h3>🎾 No tienes reservas todavía</h3>
+                            <p>¡Reserva tu primera cancha y comienza a jugar!</p>
+                            <a href="calendario.php" class="btn">🔍 Ver Canchas Disponibles</a>
                         </div>
-                    <?php endif; ?>
-                    
-                    <?php if (isset($error_reservas)): ?>
-                        <div class="mensaje error"><?= htmlspecialchars($error_reservas) ?></div>
                     <?php endif; ?>
                 </div>
             </div>

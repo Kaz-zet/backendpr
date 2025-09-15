@@ -10,9 +10,20 @@ $id_duenio = $_SESSION['id'];
 $msg = '';
 $error = '';
 
-// Obtener canchas del dueño
+// Obtener canchas del dueño con sus valoraciones
 try {
-    $stmt = $pdo->prepare("SELECT * FROM cancha WHERE id_duenio = ? ORDER BY nombre");
+    $stmt = $pdo->prepare("
+        SELECT 
+            c.*,
+            COUNT(v.id_valoracion) as total_valoraciones,
+            AVG(v.valor) as promedio_valoraciones,
+            ROUND(AVG(v.valor), 1) as promedio_redondeado
+        FROM cancha c
+        LEFT JOIN valoracion v ON c.id_cancha = v.id_cancha
+        WHERE c.id_duenio = ? 
+        GROUP BY c.id_cancha
+        ORDER BY c.nombre
+    ");
     $stmt->execute([$id_duenio]);
     $miscanchas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
@@ -151,13 +162,29 @@ function obtenerestadisticas($pdo, $id_duenio) {
     ");
     $stmt->execute([$id_duenio]);
     $espacios_mes = $stmt->fetchColumn();
+
+    // NUEVAS ESTADÍSTICAS DE VALORACIONES
+    $stmt = $pdo->prepare("
+        SELECT 
+            COUNT(v.id_valoracion) as total_valoraciones,
+            AVG(v.valor) as promedio_general,
+            COUNT(DISTINCT c.id_cancha) as canchas_valoradas
+        FROM cancha c
+        LEFT JOIN valoracion v ON c.id_cancha = v.id_cancha
+        WHERE c.id_duenio = ?
+    ");
+    $stmt->execute([$id_duenio]);
+    $stats_valoraciones = $stmt->fetch(PDO::FETCH_ASSOC);
     
     return [
         'total_mes' => $total_mes,
         'total_hoy' => $total_hoy,
         'proximas' => $proximas,
         'canceladas' => $canceladas,
-        'espacios_mes' => $espacios_mes
+        'espacios_mes' => $espacios_mes,
+        'total_valoraciones' => $stats_valoraciones['total_valoraciones'] ?? 0,
+        'promedio_general' => $stats_valoraciones['promedio_general'] ? round($stats_valoraciones['promedio_general'], 1) : 0,
+        'canchas_valoradas' => $stats_valoraciones['canchas_valoradas'] ?? 0
     ];
 }
 
@@ -226,6 +253,35 @@ $ocupacion_hoy = obtenerOcupacionPorHorario($pdo, $id_duenio);
             margin: 0;
             font-size: 2.5em;
             font-weight: 300;
+        }
+        
+        .nav-buttons {
+            display: flex;
+            gap: 15px;
+            margin: 20px 0;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .nav-buttons .btn {
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #ffc107, #e0a800);
+            color: #212529;
+        }
+
+        .btn-warning:hover {
+            background: linear-gradient(135deg, #e0a800, #d39e00);
+            transform: translateY(-2px);
         }
         
         .content {
@@ -297,6 +353,11 @@ $ocupacion_hoy = obtenerOcupacionPorHorario($pdo, $id_duenio);
         
         .stat-card.espacios {
             background: linear-gradient(135deg, #28a745, #20c997);
+        }
+
+        /* NUEVOS ESTILOS PARA VALORACIONES */
+        .stat-card.valoraciones {
+            background: linear-gradient(135deg, #ffc107, #fd7e14);
         }
         
         /* OCUPACIÓN DE HOY - NUEVA SECCIÓN */
@@ -373,6 +434,77 @@ $ocupacion_hoy = obtenerOcupacionPorHorario($pdo, $id_duenio);
             font-size: 12px;
             color: #6c757d;
             margin-top: 5px;
+        }
+
+        /* NUEVA SECCIÓN VALORACIONES */
+        .valoraciones-resumen {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            border: 1px solid #dee2e6;
+        }
+
+        .valoraciones-resumen h3 {
+            color: #495057;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .canchas-valoraciones {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+        }
+
+        .cancha-valoracion-item {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #ffd43b;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .valoracion-info-izq {
+            flex: 1;
+        }
+
+        .cancha-nombre-val {
+            font-weight: bold;
+            color: #495057;
+            margin-bottom: 8px;
+        }
+
+        .valoracion-detalle {
+            color: #6c757d;
+            font-size: 14px;
+        }
+
+        .estrellas-mini {
+            display: flex;
+            gap: 2px;
+            margin: 5px 0;
+        }
+
+        .estrella-mini {
+            font-size: 16px;
+            color: #ddd;
+        }
+
+        .estrella-mini.activa {
+            color: #ffd43b;
+        }
+
+        .valoracion-numero {
+            font-size: 2em;
+            font-weight: bold;
+            color: #fd7e14;
+            text-align: center;
+            min-width: 60px;
         }
         
         .filtros {
@@ -551,14 +683,22 @@ $ocupacion_hoy = obtenerOcupacionPorHorario($pdo, $id_duenio);
                 align-items: flex-start;
                 gap: 10px;
             }
+
+            .canchas-valoraciones {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 Gestión de Reservas</h1>
-            <p>Panel de control para dueños de canchas</p>
+            <h1>Gestión de Reservas</h1>
+            <p>Panel de control para los dueños de las canchas</p>
+            
+            <div class="nav-buttons">
+                <a href="index.php" class="btn">Volver al Inicio</a>
+            </div>
         </div>
         
         <div class="content">
@@ -570,7 +710,7 @@ $ocupacion_hoy = obtenerOcupacionPorHorario($pdo, $id_duenio);
                 <div class="mensaje error"><?= htmlspecialchars($error) ?></div>
             <?php endif; ?>
             
-            <!-- ESTADÍSTICAS CORREGIDAS -->
+            <!-- ESTADÍSTICAS CORREGIDAS CON VALORACIONES -->
             <div class="estadisticas">
                 <div class="stat-card">
                     <div class="stat-number"><?= $estadisticas['total_hoy'] ?></div>
@@ -584,25 +724,70 @@ $ocupacion_hoy = obtenerOcupacionPorHorario($pdo, $id_duenio);
                     <div class="stat-number"><?= $estadisticas['total_mes'] ?></div>
                     <div class="stat-label">Reservas este mes</div>
                 </div>
-                <div class="stat-card espacios">
-                    <div class="stat-number"><?= $estadisticas['espacios_mes'] ?></div>
-                    <div class="stat-label">Espacios reservados</div>
-                </div>
                 <div class="stat-card">
                     <div class="stat-number"><?= $estadisticas['canceladas'] ?></div>
                     <div class="stat-label">Canceladas este mes</div>
                 </div>
             </div>
+
+            <?php if ($estadisticas['total_valoraciones'] > 0): ?>
+            <div class="valoraciones-resumen">
+                <h3>Valoraciones de tus Canchas</h3>
+                <div style="background: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; text-align: center;">
+                    <div style="display: flex; justify-content: space-around; align-items: center;">
+                        <div>
+                            <div style="font-size: 2.5em; font-weight: bold; color: #fd7e14;"><?= $estadisticas['total_valoraciones'] ?></div>
+                            <div style="color: #6c757d;">Valoraciones Totales</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 2.5em; font-weight: bold; color: #007bff;"><?= $estadisticas['canchas_valoradas'] ?></div>
+                            <div style="color: #6c757d;">Canchas Valoradas</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="canchas-valoraciones">
+                    <?php foreach ($miscanchas as $cancha): ?>
+                        <?php if ($cancha['total_valoraciones'] > 0): ?>
+                            <div class="cancha-valoracion-item">
+                                <div class="valoracion-info-izq">
+                                    <div class="cancha-nombre-val"><?= htmlspecialchars($cancha['nombre']) ?></div>
+                                    <div class="estrellas-mini">
+                                        <?php
+                                        $promedio = $cancha['promedio_valoraciones'];
+                                        for ($i = 1; $i <= 5; $i++) {
+                                            echo '<span class="estrella-mini ' . ($i <= round($promedio) ? 'activa' : '') . '">★</span>';
+                                        }
+                                        ?>
+                                    </div>
+                                    <div class="valoracion-detalle">
+                                        <?= $cancha['total_valoraciones'] ?> valoración<?= $cancha['total_valoraciones'] != 1 ? 'es' : '' ?>
+                                        • Promedio: <?= number_format($cancha['promedio_valoraciones'], 2) ?>
+                                    </div>
+                                </div>
+                                <div class="valoracion-numero">
+                                    <?= $cancha['promedio_redondeado'] ?>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                </div>
+                
+                <div style="text-align: center; margin-top: 20px;">
+                    <a href="gestion_valoraciones.php" class="btn btn-warning">Ver Análisis Completo de Valoraciones</a>
+                </div>
+            </div>
+            <?php endif; ?>
             
             <!-- NUEVA SECCIÓN: Ocupación de hoy -->
             <?php if (!empty($ocupacion_hoy)): ?>
             <div class="ocupacion-hoy">
-                <h3>🕒 Ocupación de hoy - <?= date('d/m/Y') ?></h3>
+                <h3>Reservas de hoy - <?= date('d/m/Y') ?></h3>
                 <?php foreach ($ocupacion_hoy as $ocupacion): ?>
                     <div class="horario-item">
                         <div class="horario-info">
                             <div class="cancha-nombre"><?= htmlspecialchars($ocupacion['cancha_nombre']) ?></div>
-                            <div class="hora-slot">🕒 <?= $ocupacion['hora'] ?> - <?= date('H:i', strtotime($ocupacion['hora'] . ' +1 hour')) ?></div>
+                            <div class="hora-slot"><?= $ocupacion['hora'] ?> - <?= date('H:i', strtotime($ocupacion['hora'] . ' +1 hour')) ?></div>
                             <div class="usuarios-info">👥 <?= htmlspecialchars($ocupacion['usuarios']) ?></div>
                         </div>
                         <div>
@@ -624,7 +809,7 @@ $ocupacion_hoy = obtenerOcupacionPorHorario($pdo, $id_duenio);
             
             <!-- Filtros -->
             <div class="filtros">
-                <h3>🔍 Filtros de búsqueda</h3>
+                <h3>Filtros de búsqueda</h3>
                 <div class="filtros-grid">
                     <form method="get" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                         <label>Desde fecha:</label>
@@ -645,7 +830,7 @@ $ocupacion_hoy = obtenerOcupacionPorHorario($pdo, $id_duenio);
             </div>
             
             <!-- Lista de reservas CORREGIDA -->
-            <h2>📋 Reservas de mis canchas</h2>
+            <h2>Reservas de mis canchas</h2>
             
             <?php if (!empty($reservas)): ?>
                 <table class="reservas-table">
@@ -684,17 +869,17 @@ $ocupacion_hoy = obtenerOcupacionPorHorario($pdo, $id_duenio);
                                 </td>
                                 <td>
                                     <div class="cancha-info"><?= htmlspecialchars($reserva['cancha_nombre']) ?></div>
-                                    <small style="color: #666;">📍 <?= htmlspecialchars($reserva['cancha_lugar']) ?></small>
+                                    <small style="color: #666;"><?= htmlspecialchars($reserva['cancha_lugar']) ?></small>
                                 </td>
                                 <td>
                                     <strong><?= htmlspecialchars($reserva['usuario_nombre']) ?></strong><br>
-                                    <div class="cliente-info">📧 <?= htmlspecialchars($reserva['usuario_email']) ?></div>
+                                    <div class="cliente-info"><?= htmlspecialchars($reserva['usuario_email']) ?></div>
                                     <?php if ($reserva['telefono']): ?>
-                                        <div class="cliente-info">📞 <?= htmlspecialchars($reserva['telefono']) ?></div>
+                                        <div class="cliente-info"><?= htmlspecialchars($reserva['telefono']) ?></div>
                                     <?php endif; ?>
                                     <?php if ($reserva['observaciones']): ?>
                                         <div style="font-size: 12px; color: #666; margin-top: 5px;">
-                                            <strong>💬 Obs:</strong> <?= htmlspecialchars($reserva['observaciones']) ?>
+                                            <strong>desc:</strong> <?= htmlspecialchars($reserva['observaciones']) ?>
                                         </div>
                                     <?php endif; ?>
                                 </td>
@@ -733,16 +918,41 @@ $ocupacion_hoy = obtenerOcupacionPorHorario($pdo, $id_duenio);
                 </div>
             <?php endif; ?>
             
-            <!-- Resumen de canchas -->
+            <!-- Resumen de canchas con valoraciones -->
             <?php if (!empty($miscanchas)): ?>
                 <div style="margin-top: 40px; padding: 25px; background: #f8f9fa; border-radius: 10px;">
-                    <h3>🏟️ Mis canchas (<?= count($miscanchas) ?>)</h3>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; margin-top: 20px;">
+                    <h3>Mis canchas (<?= count($miscanchas) ?>)</h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 15px; margin-top: 20px;">
                         <?php foreach ($miscanchas as $cancha): ?>
                             <div style="background: white; padding: 20px; border-radius: 8px; border-left: 4px solid #667eea;">
-                                <strong>🎾 <?= htmlspecialchars($cancha['nombre']) ?></strong><br>
-                                <small style="color: #666;">📍 <?= htmlspecialchars($cancha['lugar']) ?></small><br>
-                                <small style="color: #666;">👥 Capacidad: 4 jugadores (Padel)</small>
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+                                    <div style="flex: 1;">
+                                        <strong><?= htmlspecialchars($cancha['nombre']) ?></strong><br>
+                                        <small style="color: #666;"><?= htmlspecialchars($cancha['lugar']) ?></small><br>
+                                        <small style="color: #666;">Capacidad: 4 jugadores (Padel)</small>
+                                    </div>
+                                    
+                                    <?php if ($cancha['total_valoraciones'] > 0): ?>
+                                        <div style="text-align: center; min-width: 80px;">
+                                            <div style="font-size: 1.5em; font-weight: bold; color: #fd7e14;">
+                                                <?= $cancha['promedio_redondeado'] ?>
+                                            </div>
+                                            <div style="color: #ffd43b; font-size: 16px;">
+                                                <?php for ($i = 1; $i <= 5; $i++): ?>
+                                                    <?= $i <= round($cancha['promedio_valoraciones']) ? '★' : '☆' ?>
+                                                <?php endfor; ?>
+                                            </div>
+                                            <div style="color: #6c757d; font-size: 11px;">
+                                                <?= $cancha['total_valoraciones'] ?> valoraciones
+                                            </div>
+                                        </div>
+                                    <?php else: ?>
+                                        <div style="text-align: center; min-width: 80px; color: #6c757d; font-style: italic;">
+                                            Sin valoraciones
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                                </div>
                             </div>
                         <?php endforeach; ?>
                     </div>
@@ -750,12 +960,5 @@ $ocupacion_hoy = obtenerOcupacionPorHorario($pdo, $id_duenio);
             <?php endif; ?>
         </div>
     </div>
-    
-    <p style="text-align: center; margin-top: 30px;">
-        <a href="index.php" class="btn">🏠 Volver al inicio</a> 
-        <a href="calendario.php" class="btn">👁️ Ver calendario</a> 
-        <a href="dueño.php" class="btn">➕ Crear nueva cancha</a>
-    </p>
 </body>
 </html>
-            

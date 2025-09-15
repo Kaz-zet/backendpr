@@ -14,6 +14,103 @@ $id_cancha = $_GET['id'] ?? null;
 //Mostramos la fecha de hoy.
 $fecha_mostrar = $_GET['fecha'] ?? date('Y-m-d');
 
+// NUEVO: Procesar valoración si se envió el formulario
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['enviar_valoracion'])) {
+    if (!$id_usuario) {
+        $error = 'Debes iniciar sesión para valorar canchas';
+    } elseif ($_SESSION['rol'] !== 'usuario') {
+        $error = 'Solo los usuarios pueden valorar canchas';
+    } else {
+        $valor = (int)($_POST['valor'] ?? 0);
+        $comentario = trim($_POST['comentario'] ?? '');
+        
+        if ($valor >= 1 && $valor <= 5) {
+            try {
+                // Verificar si el usuario ya valoró esta cancha
+                $stmt = $pdo->prepare("SELECT id_valoracion FROM valoracion WHERE id_usuario = ? AND id_cancha = ?");
+                $stmt->execute([$id_usuario, $id_cancha]);
+                $valoracion_existente = $stmt->fetch();
+                
+                if ($valoracion_existente) {
+                    // Actualizar valoración existente
+                    $stmt = $pdo->prepare("UPDATE valoracion SET valor = ?, comentario = ? WHERE id_usuario = ? AND id_cancha = ?");
+                    $stmt->execute([$valor, $comentario, $id_usuario, $id_cancha]);
+                    $msg = "Tu valoración ha sido actualizada correctamente";
+                } else {
+                    // Crear nueva valoración
+                    $stmt = $pdo->prepare("INSERT INTO valoracion (valor, comentario, id_usuario, id_cancha) VALUES (?, ?, ?, ?)");
+                    $stmt->execute([$valor, $comentario, $id_usuario, $id_cancha]);
+                    $msg = "¡Gracias por valorar esta cancha!";
+                }
+                
+                // Actualizar el campo valoracion en la tabla cancha (promedio redondeado)
+                $stmt = $pdo->prepare("
+                    SELECT AVG(valor) as promedio
+                    FROM valoracion 
+                    WHERE id_cancha = ?
+                ");
+                $stmt->execute([$id_cancha]);
+                $stats = $stmt->fetch(PDO::FETCH_ASSOC);
+                $promedio_redondeado = round($stats['promedio']);
+                
+                $stmt = $pdo->prepare("UPDATE cancha SET valoracion = ? WHERE id_cancha = ?");
+                $stmt->execute([$promedio_redondeado, $id_cancha]);
+                
+            } catch (PDOException $e) {
+                $error = "Error al procesar la valoración: " . $e->getMessage();
+            }
+        } else {
+            $error = 'La valoración debe ser entre 1 y 5 estrellas';
+        }
+    }
+}
+
+//Saca el promedio de Valoraciones
+function obtenerPromedioValoracion($pdo, $id_cancha) {
+    $stmt = $pdo->prepare("
+        SELECT 
+            AVG(valor) as promedio,
+            COUNT(*) as total_valoraciones
+        FROM valoracion 
+        WHERE id_cancha = ?
+    ");
+    $stmt->execute([$id_cancha]);
+    $resultado = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    return [
+        'promedio' => $resultado['promedio'] ? round($resultado['promedio'], 1) : 0,
+        'total' => $resultado['total_valoraciones'] ?? 0
+    ];
+}
+
+//NUEVA FUNCIÓN: Obtiene todas las valoraciones con comentarios de una cancha
+function obtenerValoracionesCompletas($pdo, $id_cancha) {
+    $stmt = $pdo->prepare("
+        SELECT 
+            v.valor,
+            v.comentario,
+            u.nombre as usuario_nombre,
+            v.id_valoracion
+        FROM valoracion v
+        INNER JOIN usuario u ON v.id_usuario = u.id_usuario
+        WHERE v.id_cancha = ?
+        ORDER BY v.valor DESC, v.id_valoracion DESC
+    ");
+    $stmt->execute([$id_cancha]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+//Verifica si el usuario ya valoró la cancha y obtiene su valoración
+function obtenerValoracionUsuario($pdo, $id_usuario, $id_cancha) {
+    if (!$id_usuario) return false;
+    
+    $stmt = $pdo->prepare("SELECT valor, comentario FROM valoracion WHERE id_usuario = ? AND id_cancha = ?");
+    $stmt->execute([$id_usuario, $id_cancha]);
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    return $result ?: false;
+}
+
 //Mostramos y preparamos los datos de la cancha espicifica usando la ID q sacamos.
 if ($id_cancha) {
     try {
@@ -112,7 +209,7 @@ function generarhorarios() {
     return $horarios;
 }
 
-//FUNCIÓN CORREGIDA: Verifica estado del horario (disponible, parcialmente ocupado, completo, pasado)
+//Verifica estado del horario (disponible, parcialmente ocupado, completo, pasado)
 function obtenerEstadoHorario($reservas, $hora, $fecha_mostrar) {
     // Si la fecha es HOY, verificar si la hora ya pasó
     if ($fecha_mostrar === date('Y-m-d')) {
@@ -133,7 +230,7 @@ function obtenerEstadoHorario($reservas, $hora, $fecha_mostrar) {
     $espacios_disponibles = $info_espacios['espacios_disponibles'];
     
     if ($espacios_ocupados === 0) {
-        // Completamente disponible
+        // Disponible
         return [
             'tipo' => 'disponible',
             'mensaje' => 'Disponible',
@@ -141,7 +238,7 @@ function obtenerEstadoHorario($reservas, $hora, $fecha_mostrar) {
             'info_espacios' => '4 espacios libres'
         ];
     } elseif ($espacios_ocupados >= 4) {
-        // Completamente ocupado
+        // Ocupado
         $reservas_info = [];
         foreach ($info_espacios['reservas'] as $reserva) {
             $reservas_info[] = $reserva['usuario_nombre'];
@@ -154,7 +251,7 @@ function obtenerEstadoHorario($reservas, $hora, $fecha_mostrar) {
             'usuarios' => $reservas_info
         ];
     } else {
-        // Parcialmente ocupado
+        // Espacios disponibles
         $reservas_info = [];
         foreach ($info_espacios['reservas'] as $reserva) {
             $reservas_info[] = $reserva['usuario_nombre'] . ' (' . $reserva['espacios_reservados'] . ' espacios)';
@@ -316,12 +413,336 @@ $horarios = generarhorarios();
         .color-parcial { background: linear-gradient(135deg, #ffd43b, #fab005); }
         .color-completo { background: linear-gradient(135deg, #ff6b6b, #ff8e8e); }
         .color-pasado { background: #868e96; }
+
+        /* ESTILOS MEJORADOS PARA VALORACIONES */
+        .valoracion-section {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 12px;
+            margin: 25px 0;
+            border: 2px solid #e9ecef;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .valoracion-promedio {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            margin-bottom: 25px;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .promedio-numero {
+            font-size: 3em;
+            font-weight: bold;
+            color: #fd7e14;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .estrellas-promedio {
+            display: flex;
+            gap: 8px;
+        }
+
+        .estrella {
+            font-size: 28px;
+            color: #ddd;
+            transition: color 0.3s;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .estrella.activa {
+            color: #ffd43b;
+        }
+
+        .estrella.media {
+            color: #ffd43b;
+            position: relative;
+        }
+
+        .total-valoraciones {
+            color: #6c757d;
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        .valoracion-usuario {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .valoracion-usuario h4 {
+            margin: 0 0 20px 0;
+            color: #495057;
+            font-size: 18px;
+        }
+
+        .estrellas-seleccion {
+            display: flex;
+            gap: 8px;
+            margin: 15px 0;
+        }
+
+        .radio-estrella {
+            display: none;
+        }
+
+        .label-estrella {
+            font-size: 36px;
+            color: #ddd;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .label-estrella:hover {
+            color: #ffd43b;
+            transform: scale(1.1);
+        }
+
+        .radio-estrella:checked ~ .label-estrella,
+        .radio-estrella:checked ~ .radio-estrella + .label-estrella {
+            color: #ffd43b;
+        }
+
+        /* Estilo mejorado para las estrellas seleccionadas */
+        .estrellas-container {
+            display: flex;
+            gap: 5px;
+            margin: 15px 0;
+        }
+
+        .estrella-input {
+            position: relative;
+        }
+
+        .estrella-input input[type="radio"] {
+            opacity: 0;
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            cursor: pointer;
+        }
+
+        .estrella-label {
+            font-size: 36px;
+            color: #ddd;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: block;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .estrella-input:hover .estrella-label {
+            color: #ffd43b;
+            transform: scale(1.1);
+        }
+
+        .estrella-input input[type="radio"]:checked + .estrella-label {
+            color: #ffd43b;
+        }
+
+        /* Efecto de hover consecutivo */
+        .estrellas-container:hover .estrella-input:hover ~ .estrella-input .estrella-label {
+            color: #ddd;
+        }
+
+        .btn-valorar {
+            background: linear-gradient(135deg, #fd7e14, #fab005);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 8px rgba(253, 126, 20, 0.3);
+        }
+
+        .btn-valorar:hover {
+            background: linear-gradient(135deg, #e8590c, #fd7e14);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(253, 126, 20, 0.4);
+        }
+
+        .valoracion-existente {
+            background: #e7f3ff;
+            border: 2px solid #1976d2;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .valoracion-existente h4 {
+            color: #1976d2;
+            margin: 0 0 15px 0;
+        }
+
+        .comentario-section {
+            margin-top: 20px;
+        }
+
+        .comentario-section label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .comentario-section textarea {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: 2px solid #ced4da;
+            font-size: 14px;
+            resize: vertical;
+            transition: border-color 0.3s;
+        }
+
+        .comentario-section textarea:focus {
+            outline: none;
+            border-color: #fd7e14;
+            box-shadow: 0 0 0 3px rgba(253, 126, 20, 0.1);
+        }
+
+        .mensaje {
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-weight: 500;
+        }
+
+        .mensaje.success {
+            background: #d1f2eb;
+            color: #00695c;
+            border: 2px solid #4caf50;
+        }
+
+        .mensaje.error {
+            background: #ffeaea;
+            color: #c62828;
+            border: 2px solid #f44336;
+        }
+
+        /* NUEVOS ESTILOS PARA MOSTRAR COMENTARIOS */
+        .comentarios-section {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            margin-top: 25px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .comentarios-lista {
+            display: grid;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .comentario-item {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #fd7e14;
+            transition: all 0.3s ease;
+        }
+
+        .comentario-item:hover {
+            background: #e9ecef;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .comentario-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .comentario-usuario {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .usuario-avatar {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #fd7e14, #fab005);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .usuario-nombre {
+            font-weight: 600;
+            color: #495057;
+            font-size: 16px;
+        }
+
+        .comentario-estrellas {
+            display: flex;
+            gap: 2px;
+        }
+
+        .comentario-estrellas .estrella {
+            font-size: 18px;
+        }
+
+        .comentario-texto {
+            color: #495057;
+            font-size: 15px;
+            line-height: 1.6;
+            margin-top: 10px;
+            font-style: italic;
+        }
+
+        .sin-comentarios {
+            text-align: center;
+            padding: 30px;
+            color: #6c757d;
+        }
+
+        .sin-comentarios h4 {
+            margin-bottom: 10px;
+            color: #495057;
+        }
+
+        .mostrar-comentarios-btn {
+            background: linear-gradient(135deg, #6f42c1, #563d7c);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 15px;
+        }
+
+        .mostrar-comentarios-btn:hover {
+            background: linear-gradient(135deg, #563d7c, #452a5c);
+            transform: translateY(-1px);
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <?php if (!empty($msg)): ?>
-            <div class="mensaje success"><?= $msg ?></div>
+            <div class="mensaje success"><?= htmlspecialchars($msg) ?></div>
         <?php endif; ?>
         
         <?php if (!empty($error)): ?>
@@ -379,9 +800,6 @@ $horarios = generarhorarios();
             <div class="info-item" style="background: #e3f2fd; padding: 10px; border-radius: 5px; margin: 10px 0;">
                 <strong>🎾 Cancha de Padel - Máximo 4 jugadores por reserva</strong>
             </div>
-        </div>
-        <?php endif; ?>
-        <?php endif; ?>
         
         <?php if (!$id_usuario && $id_cancha): ?>
             <div class="alert-login">
@@ -452,16 +870,36 @@ $horarios = generarhorarios();
             </div>
         </div>
         
+        
         <h2><?= $id_usuario ? 'Haz clic para reservar' : 'Horarios disponibles' ?></h2>
         
         <?php if (!empty($canchas)): ?>
             <div class="calendario-grid" id="canchas-grid">
                 <?php foreach ($canchas as $cancha): ?>
-                    <?php $reservas = obtenerreservas($pdo, $cancha['id_cancha'], $fecha_mostrar); ?>
+                    <?php 
+                    $reservas = obtenerreservas($pdo, $cancha['id_cancha'], $fecha_mostrar);
+                    
+                    // Si estamos mostrando múltiples canchas, obtener valoración promedio
+                    if (!$id_cancha) {
+                        $val_info = obtenerPromedioValoracion($pdo, $cancha['id_cancha']);
+                    }
+                    ?>
                     <div class="cancha-card" data-nombre="<?= strtolower(htmlspecialchars($cancha['nombre'])) ?>" data-lugar="<?= strtolower(htmlspecialchars($cancha['lugar'])) ?>">
                         <div class="cancha-header">
                             <h3><?= htmlspecialchars($cancha['nombre']) ?></h3>
                             <p style="margin: 5px 0; font-size: 14px;">📍 <?= htmlspecialchars($cancha['lugar']) ?></p>
+                            
+                            <!-- Mostrar valoración en vista de múltiples canchas -->
+                            <?php if (!$id_cancha && isset($val_info)): ?>
+                                <div style="display: flex; align-items: center; gap: 5px; margin-top: 5px;">
+                                    <?php for ($i = 1; $i <= 5; $i++): ?>
+                                        <span class="estrella <?= $i <= $val_info['promedio'] ? 'activa' : '' ?>" style="font-size: 14px;">★</span>
+                                    <?php endfor; ?>
+                                    <span style="font-size: 12px; color: #666;">
+                                        (<?= $val_info['promedio'] ?>/5 - <?= $val_info['total'] ?> valoraciones)
+                                    </span>
+                                </div>
+                            <?php endif; ?>
                         </div>
                         
                         <div class="horario-grid">
@@ -514,6 +952,145 @@ $horarios = generarhorarios();
                 <a href="cancha.php" class="btn">Ver todas las canchas</a>
             </div>
         <?php endif; ?>
+        
+        <!-- SECCIÓN DE VALORACIONES MEJORADA -->
+        <?php 
+        $valoracion_info = obtenerPromedioValoracion($pdo, $id_cancha);
+        $valoracion_usuario = obtenerValoracionUsuario($pdo, $id_usuario, $id_cancha);
+        $valoraciones_completas = obtenerValoracionesCompletas($pdo, $id_cancha);
+        ?>
+        
+        <div class="valoracion-section">
+            <h3>Valoraciones</h3>
+            
+            <!-- Promedio de valoraciones -->
+            <div class="valoracion-promedio">
+                <div class="promedio-numero">
+                    <?= $valoracion_info['promedio'] > 0 ? $valoracion_info['promedio'] : '-' ?>
+                </div>
+                <div>
+                    <div class="estrellas-promedio">
+                        <?php 
+                        $promedio = $valoracion_info['promedio'];
+                        for ($i = 1; $i <= 5; $i++) {
+                            if ($promedio >= $i) {
+                                echo '<span class="estrella activa">★</span>';
+                            } elseif ($promedio >= ($i - 0.5)) {
+                                echo '<span class="estrella media">☆</span>';
+                            } else {
+                                echo '<span class="estrella">☆</span>';
+                            }
+                        }
+                        ?>
+                    </div>
+                    <div class="total-valoraciones">
+                        <?= $valoracion_info['total'] ?> valoración<?= $valoracion_info['total'] != 1 ? 'es' : '' ?>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Formulario para valorar (solo usuarios logueados) -->
+            <?php if ($id_usuario): ?>
+                <div class="valoracion-usuario">
+                    <?php if ($valoracion_usuario !== false): ?>
+                        <div class="valoracion-existente">
+                            <h4>Tu valoración actual:</h4>
+                            <div class="estrellas-promedio">
+                                <?php for ($i = 1; $i <= 5; $i++): ?>
+                                    <span class="estrella <?= $i <= $valoracion_usuario['valor'] ? 'activa' : '' ?>">★</span>
+                                <?php endfor; ?>
+                            </div>
+                            <p><small>Has valorado esta cancha con <?= $valoracion_usuario['valor'] ?> estrella<?= $valoracion_usuario['valor'] > 1 ? 's' : '' ?>. Puedes cambiar tu valoración abajo.</small></p>
+                            <?php if (!empty($valoracion_usuario['comentario'])): ?>
+                                <p><strong>Tu comentario:</strong> "<?= htmlspecialchars($valoracion_usuario['comentario']) ?>"</p>
+                            <?php endif; ?>
+                        </div>
+                    <?php else: ?>
+                        <h4>¿Qué te pareció esta cancha?</h4>
+                    <?php endif; ?>
+                    
+                    <form method="POST" action="">
+                        <input type="hidden" name="enviar_valoracion" value="1">
+                        
+                        <div class="estrellas-container">
+                            <?php for ($i = 1; $i <= 5; $i++): ?>
+                                <div class="estrella-input">
+                                    <input type="radio" name="valor" value="<?= $i ?>" id="estrella<?= $i ?>" 
+                                           <?= ($valoracion_usuario && $valoracion_usuario['valor'] == $i) ? 'checked' : '' ?>
+                                           required>
+                                    <label class="estrella-label" for="estrella<?= $i ?>">★</label>
+                                </div>
+                            <?php endfor; ?>
+                        </div>
+
+                        <div class="comentario-section">
+                            <label for="comentario">Comentario (opcional):</label>
+                            <textarea name="comentario" id="comentario" rows="4" 
+                                      placeholder="Comparte tu experiencia..."><?= $valoracion_usuario ? htmlspecialchars($valoracion_usuario['comentario']) : '' ?></textarea>
+                        </div>
+                        
+                        <button type="submit" class="btn-valorar">
+                            <?= $valoracion_usuario ? 'Actualizar valoración' : 'Enviar valoración' ?>
+                        </button>
+                    </form>
+                </div>
+            <?php else: ?>
+                <div class="valoracion-usuario">
+                    <p style="text-align: center; font-size: 16px;">
+                        <a href="login.php" style="color: #fd7e14; font-weight: bold;">Inicia sesión</a> para valorar esta cancha
+                    </p>
+                </div>
+            <?php endif; ?>
+
+            <!-- NUEVA SECCIÓN: Comentarios de usuarios -->
+            <?php if (!empty($valoraciones_completas)): ?>
+                <div class="comentarios-section">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h4>Comentarios de usuarios (<?= count($valoraciones_completas) ?>)</h4>
+                        <button class="mostrar-comentarios-btn" onclick="toggleComentarios()">Ver comentarios</button>
+                    </div>
+                    
+                    <div id="comentarios-lista" class="comentarios-lista" style="display: none;">
+                        <?php foreach ($valoraciones_completas as $val): ?>
+                            <div class="comentario-item">
+                                <div class="comentario-header">
+                                    <div class="comentario-usuario">
+                                        <div class="usuario-avatar">
+                                            <?= strtoupper(substr($val['usuario_nombre'], 0, 1)) ?>
+                                        </div>
+                                        <span class="usuario-nombre"><?= htmlspecialchars($val['usuario_nombre']) ?></span>
+                                    </div>
+                                    <div class="comentario-estrellas">
+                                        <?php for ($i = 1; $i <= 5; $i++): ?>
+                                            <span class="estrella <?= $i <= $val['valor'] ? 'activa' : '' ?>">★</span>
+                                        <?php endfor; ?>
+                                    </div>
+                                </div>
+                                <?php if (!empty($val['comentario'])): ?>
+                                    <div class="comentario-texto">
+                                        "<?= htmlspecialchars($val['comentario']) ?>"
+                                    </div>
+                                <?php else: ?>
+                                    <div class="comentario-texto" style="color: #9ca3af; font-style: italic;">
+                                        Usuario no dejó comentario escrito
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php elseif ($valoracion_info['total'] > 0): ?>
+                <div class="comentarios-section">
+                    <div class="sin-comentarios">
+                        <h4>Sin comentarios escritos</h4>
+                        <p>Los usuarios han valorado esta cancha pero no han dejado comentarios por escrito.</p>
+                    </div>
+                </div>
+            <?php endif; ?>
+        </div>
+        </div>
+        <?php endif; ?>
+        <?php endif; ?>
     </div>
     
     <p style="text-align: center;">
@@ -523,5 +1100,63 @@ $horarios = generarhorarios();
             <a href="index.php">Volver al inicio</a>
         <?php endif; ?>
     </p>
+
+    <script>
+        // .addEventListener('DOMContentLoaded') para asegurar que el DOM esté cargado. DOM (Document Object Model) es el HTML que se puede usar con JavaScript.
+        document.addEventListener('DOMContentLoaded', function() {
+            // querySelector selecciona lo primero que coincida con el CSS que se indico.
+            const estrellasContainer = document.querySelector('.estrellas-container');
+            if (!estrellasContainer) return;
+            // querySelectorAll selecciona cualquier CSS que coincida con lo que se le indico.
+            const estrellas = estrellasContainer.querySelectorAll('.estrella-input');
+            
+            estrellas.forEach((estrella, index) => {
+                estrella.addEventListener('mouseenter', function() {
+                    // Resalta las estrellas de amarillo hasta la que se está pasando el mouse
+                    for (let i = 0; i <= index; i++) {
+                        estrellas[i].querySelector('.estrella-label').style.color = '#ffd43b';
+                        estrellas[i].querySelector('.estrella-label').style.transform = 'scale(1.1)';
+                    }
+                    // pone las estrellas que estén después del mouse en gris
+                    for (let i = index + 1; i < estrellas.length; i++) {
+                        estrellas[i].querySelector('.estrella-label').style.color = '#ddd';
+                        estrellas[i].querySelector('.estrella-label').style.transform = 'scale(1)';
+                    }
+                });
+            });
+            // .addEventListener('mouseleave') es para cuando el mouse sale del contenedor de las estrellas.
+            estrellasContainer.addEventListener('mouseleave', function() {
+                // Mantiene las estrellas amarillas según la cantidad que indico el usuario
+                // input[type="radio"]:checked hace referencia a la estrella que el usuario selecciono.
+                const seleccionada = estrellasContainer.querySelector('input[type="radio"]:checked');
+                //parseInt convierte un string en un número entero. Si no hay ninguna seleccionada, valorSeleccionado será 0.
+                const valorSeleccionado = seleccionada ? parseInt(seleccionada.value) : 0;
+                
+                estrellas.forEach((estrella, index) => {
+                    const label = estrella.querySelector('.estrella-label');
+                    if (index < valorSeleccionado) {
+                        label.style.color = '#ffd43b';
+                    } else {
+                        label.style.color = '#ddd';
+                    }
+                    label.style.transform = 'scale(1)';
+                });
+            });
+        });
+
+        // Función para mostrar/ocultar comentarios
+        function toggleComentarios() {
+            const comentariosList = document.getElementById('comentarios-lista');
+            const toggleBtn = document.querySelector('.mostrar-comentarios-btn');
+            
+            if (comentariosList.style.display === 'none' || comentariosList.style.display === '') {
+                comentariosList.style.display = 'grid';
+                toggleBtn.textContent = 'Ocultar comentarios';
+            } else {
+                comentariosList.style.display = 'none';
+                toggleBtn.textContent = 'Ver comentarios';
+            }
+        }
+    </script>
 </body>
 </html>

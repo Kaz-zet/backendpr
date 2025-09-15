@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Sep 14, 2025 at 04:14 AM
+-- Generation Time: Sep 15, 2025 at 06:27 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -63,8 +63,8 @@ CREATE TABLE `cancha` (
 --
 
 INSERT INTO `cancha` (`id_cancha`, `id_duenio`, `nombre`, `lugar`, `foto`, `bio`, `verificado`, `valoracion`) VALUES
-(73, 2, 'Talleres', 'Alsina 1567', 'cancha_1757704787_8018.png', 'Cancha de Padel 1v1 y 2v2', 0, 0),
-(74, 2, 'Club Atlético Boca Juniors', 'Alsina 1244', 'cancha_1757718101_6684.png', 'Cancha de padel 1v1 y 2v2!', 0, 0);
+(73, 2, 'Talleres', 'Alsina 1567', 'cancha_1757704787_8018.png', 'Cancha de Padel 1v1 y 2v2', 0, 5),
+(74, 2, 'Club Atlético Boca Juniors', 'Alsina 1244', 'cancha_1757718101_6684.png', 'Cancha de padel 1v1 y 2v2!', 0, 4);
 
 -- --------------------------------------------------------
 
@@ -131,11 +131,14 @@ INSERT INTO `reserva` (`id_reserva`, `codigo_reserva`, `fecha`, `hora_inicio`, `
 (56, 'MNTHZ6', '2025-09-14', '21:00:00', '22:00:00', 5, 73, 2, 1, '124124', '', 'cancelada'),
 (57, '6BMSKT', '2025-09-13', '22:00:00', '23:00:00', 2, 74, 1, 1, '12345464564', '', 'cancelada'),
 (58, '6AUN9K', '2025-09-13', '22:00:00', '23:00:00', 4, 74, 1, 1, '12434452332', '', 'cancelada'),
-(59, 'XQP742', '2025-09-14', '12:00:00', '13:00:00', 4, 73, 2, 1, '12334342123', '', 'activa'),
-(60, '4TLN0Q', '2025-09-14', '12:00:00', '13:00:00', 6, 73, 1, 1, '12345668', '', 'activa'),
-(61, 'LCY9W4', '2025-09-14', '12:00:00', '13:00:00', 2, 73, 1, 1, '21321134321', '', 'activa'),
-(62, 'L1G7FC', '2025-09-14', '15:00:00', '16:00:00', 2, 74, 1, 1, '2131314123', '', 'activa'),
-(63, 'JTCQFS', '2025-09-14', '15:00:00', '16:00:00', 2, 74, 1, 1, '2131434123131', '', 'activa');
+(59, 'XQP742', '2025-09-14', '12:00:00', '13:00:00', 4, 73, 2, 1, '12334342123', '', 'cancelada'),
+(60, '4TLN0Q', '2025-09-14', '12:00:00', '13:00:00', 6, 73, 1, 1, '12345668', '', 'cancelada'),
+(61, 'LCY9W4', '2025-09-14', '12:00:00', '13:00:00', 2, 73, 1, 1, '21321134321', '', 'cancelada'),
+(62, 'L1G7FC', '2025-09-14', '15:00:00', '16:00:00', 2, 74, 1, 1, '2131314123', '', 'cancelada'),
+(63, 'JTCQFS', '2025-09-14', '15:00:00', '16:00:00', 2, 74, 1, 1, '2131434123131', '', 'cancelada'),
+(64, 'LZUGDT', '2025-09-14', '16:00:00', '17:00:00', 4, 73, 2, 1, '3143134321', '', 'cancelada'),
+(65, 'HPZ07W', '2025-09-14', '16:00:00', '17:00:00', 6, 73, 1, 1, '13214123', '', 'cancelada'),
+(66, '3PA7DT', '2025-09-15', '12:00:00', '13:00:00', 2, 74, 2, 1, '2131413412', '', 'activa');
 
 -- --------------------------------------------------------
 
@@ -186,9 +189,17 @@ INSERT INTO `usuario` (`id_usuario`, `nombre`, `email`, `contrasena`, `foto`) VA
 CREATE TABLE `valoracion` (
   `id_valoracion` int(11) NOT NULL,
   `valor` int(10) NOT NULL,
+  `comentario` text NOT NULL,
   `id_usuario` int(11) NOT NULL,
   `id_cancha` int(11) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `valoracion`
+--
+
+INSERT INTO `valoracion` (`id_valoracion`, `valor`, `comentario`, `id_usuario`, `id_cancha`) VALUES
+(2, 4, 'Muy buena gestion!', 6, 74);
 
 -- --------------------------------------------------------
 
@@ -304,7 +315,7 @@ ALTER TABLE `favoritos`
 -- AUTO_INCREMENT for table `reserva`
 --
 ALTER TABLE `reserva`
-  MODIFY `id_reserva` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=64;
+  MODIFY `id_reserva` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=67;
 
 --
 -- AUTO_INCREMENT for table `reserva_jugadores`
@@ -322,7 +333,7 @@ ALTER TABLE `usuario`
 -- AUTO_INCREMENT for table `valoracion`
 --
 ALTER TABLE `valoracion`
-  MODIFY `id_valoracion` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id_valoracion` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT for table `verificacion`

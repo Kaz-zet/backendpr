@@ -3,7 +3,7 @@ session_start();
 require_once 'conexiones/conDB.php';
 
 // Si ya está logueado, redirigir
-if (isset($_SESSION['usuario'])) {
+if (isset($_SESSION['rol'])) {
     header('Location: index.php');
     exit;
 }
@@ -16,38 +16,79 @@ if (isset($_GET['logout']) && $_GET['logout'] === 'success') {
     $success_message = 'Sesión cerrada exitosamente.';
 }
 
-if ($_POST) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $nombre = trim($_POST['nombre'] ?? '');
     $email = filter_var($_POST['email'], FILTER_SANITIZE_EMAIL);
-    $contraseña = $_POST['contraseña'];
+    $contrasena = $_POST['contrasena'] ?? '';
     
-    if (empty($email) || empty($contraseña)) {
+    if (empty($nombre) || empty($email) || empty($contrasena)) {
         $error_message = 'Por favor, complete todos los campos.';
     } else {
         try {
-            // Buscar usuario en la base de datos
-            $stmt = $pdo->prepare("SELECT id_usuario, nombre, email, contrasena FROM usuario WHERE email = ?");
-            $stmt->execute([$email]);
-            $usuario = $stmt->fetch();
+            $rol = null;
+            $user = null;
             
-            if ($usuario) {
-                // Verificar contraseña (por ahora comparación directa, luego cambiar a password_verify)
-                if ($usuario['contrasena'] === $contraseña) {
-                    // Login exitoso
-                    $_SESSION['usuario'] = [
-                        'id' => $usuario['id_usuario'],
-                        'nombre' => $usuario['nombre'],
-                        'email' => $usuario['email']
-                    ];
-                    header('Location: index.php');
-                    exit;
-                } else {
-                    $error_message = 'Email o contraseña incorrectos.';
-                }
+            // Buscar en Admin
+            $stmt = $pdo->prepare("SELECT id_admin AS id, nombre, contrasena 
+                                   FROM admin WHERE email = ?");
+            $stmt->execute([$email]);
+            $user = $stmt->fetch();
+
+            if ($user && $user['contrasena'] === $contrasena && mb_strtolower($user['nombre']) === mb_strtolower($nombre)) {
+                $rol = "admin";
             } else {
-                $error_message = 'Email o contraseña incorrectos.';
+                // Buscar en Dueño
+                $stmt = $pdo->prepare("SELECT id_duenio AS id, nombre, contrasena
+                                       FROM duenio WHERE email = ?");
+                $stmt->execute([$email]);
+                $user = $stmt->fetch();
+
+                if ($user && $user['contrasena'] === $contrasena && mb_strtolower($user['nombre']) === mb_strtolower($nombre)) {
+                    $rol = "duenio";
+                } else {
+                    // Buscar en Usuario
+                    $stmt = $pdo->prepare("SELECT id_usuario AS id, nombre, contrasena 
+                                           FROM usuario WHERE email = ?");
+                    $stmt->execute([$email]);
+                    $user = $stmt->fetch();
+
+                    if ($user && $user['contrasena'] === $contrasena && mb_strtolower($user['nombre']) === mb_strtolower($nombre)) {
+                        $rol = "usuario";
+                    }
+                }
             }
+
+            if ($rol && $user) {
+                // Guardar en sesión
+                $_SESSION['id'] = $user['id'];
+                $_SESSION['nombre'] = $user['nombre'];
+                $_SESSION['rol'] = $rol;
+
+                // Para compatibilidad con el sistema anterior
+                if ($rol === "usuario") {
+                    $_SESSION['usuario'] = [
+                        'id' => $user['id'],
+                        'nombre' => $user['nombre'],
+                        'email' => $email
+                    ];
+                }
+
+                // Redirigir según rol
+                if ($rol === "admin") {
+                    header("Location: admin.php");
+                } elseif ($rol === "duenio") {
+                    header("Location: index.php");
+                } else {
+                    header("Location: index.php");
+                }
+                exit;
+            } else {
+                $error_message = 'Credenciales incorrectas. Verifique nombre, email y contraseña.';
+            }
+            
         } catch (PDOException $e) {
             $error_message = 'Error en el sistema. Intente nuevamente.';
+            error_log("Login error: " . $e->getMessage());
         }
     }
 }
@@ -77,7 +118,7 @@ if ($_POST) {
       border-radius: 20px;
       box-shadow: 8px 8px 16px var(--shadow-dark), -8px -8px 16px var(--shadow-light);
       padding: 3rem;
-      max-width: 400px;
+      max-width: 450px;
       width: 100%;
       transition: all .8s ease-in-out;
     }
@@ -125,6 +166,23 @@ if ($_POST) {
       box-shadow: 4px 4px 8px var(--shadow-dark), -4px -4px 8px var(--shadow-light);
       margin-bottom: 1rem;
     }
+    .role-info {
+      background: var(--bg-color);
+      border-radius: 15px;
+      box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
+      padding: 1rem;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+      color: var(--main-color);
+    }
+    .role-info h6 {
+      color: var(--main-color);
+      margin-bottom: 0.5rem;
+    }
+    .role-info small {
+      display: block;
+      margin-bottom: 0.3rem;
+    }
     </style>
 <body>
         <div class="container-fluid p-2"  style="background-image: url('image/padel-fondo.jpg'); background-size: cover; background-repeat: no-repeat;">
@@ -133,7 +191,10 @@ if ($_POST) {
     <div class="row" id="navbar" >
       <div class="col-12">
         <nav class="navbar navbar-expand-lg ">
-          <a class="navbar-brand me-auto" href="#">Logo</a>
+          <a class="navbar-brand me-auto" href="#">
+            <img src="image/icon.png" alt="Logo" width="85" height="60"
+                class="d-inline-block align-text-top">
+          </a>
           <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasNavbar"
             aria-labelledby="offcanvasNavbarLabel">
             <div class="offcanvas-header">
@@ -157,6 +218,11 @@ if ($_POST) {
               </ul>
             </div>
           </div>
+          <button class="navbar-toggler pe-0 " type="button" data-bs-toggle="offcanvas"
+            data-bs-target="#offcanvasNavbar" aria-controls="offcanvasNavbar"
+            aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+          </button>
         </nav>
       </div>
     </div>
@@ -164,31 +230,50 @@ if ($_POST) {
     <!--formulario-->
     <div id="main" class="d-flex justify-content-center align-items-center min-vh-100"  >
       <div class="neumorphic-card">
-        <h1 class="text-center fw-bold mb-4">Login</h1>
+        <h1 class="text-center fw-bold mb-4">Iniciar Sesión</h1>
+        
+        <!-- Información de roles de prueba -->
+        <div class="role-info">
+          <h6>Cuentas de prueba:</h6>
+          <small><strong>Usuario:</strong> Beti - beti@gmail.com - 123456</small>
+          <small><strong>Dueño:</strong> A - A@gmail.com - 123456</small>
+          <small><strong>Admin:</strong> Ad - Ad@gmail.com - 123</small>
+        </div>
         
         <?php if ($error_message): ?>
         <div class="alert alert-danger alert-custom">
+          <i class="fas fa-exclamation-triangle me-2"></i>
           <?php echo htmlspecialchars($error_message); ?>
         </div>
         <?php endif; ?>
         
         <?php if ($success_message): ?>
         <div class="alert alert-success alert-custom">
+          <i class="fas fa-check-circle me-2"></i>
           <?php echo htmlspecialchars($success_message); ?>
         </div>
         <?php endif; ?>
         
         <form action="" method="POST">
-          <div class="mb-4">
+          <div class="mb-3">
+            <label for="nombre" class="form-label">Nombre</label>
+            <input type="text" name="nombre" class="form-control neumorphic-input" required id="nombre" 
+                   placeholder="Ingrese su nombre" value="<?php echo isset($_POST['nombre']) ? htmlspecialchars($_POST['nombre']) : ''; ?>">
+          </div>
+          <div class="mb-3">
             <label for="email" class="form-label">Email</label>
-            <input type="email" name="email" class="form-control neumorphic-input" required id="email" placeholder="Ingrese su email" value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>">
+            <input type="email" name="email" class="form-control neumorphic-input" required id="email" 
+                   placeholder="Ingrese su email" value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>">
           </div>
           <div class="mb-4">
-            <label for="contraseña" class="form-label">Contraseña</label>
-            <input type="password" name="contraseña" class="form-control neumorphic-input" required id="contraseña" placeholder="Ingrese su contraseña">
+            <label for="contrasena" class="form-label">Contraseña</label>
+            <input type="password" name="contrasena" class="form-control neumorphic-input" required id="contrasena" 
+                   placeholder="Ingrese su contraseña">
           </div>
-          <div>
-            <a href="registro.php">¿No tienes una cuenta? Regístrate aquí</a>
+          <div class="mb-3 text-center">
+            <a href="registro.php" class="text-decoration-none" style="color: var(--main-color);">
+              ¿No tienes una cuenta? Regístrate aquí
+            </a>
           </div>
           <div class="d-grid">
             <button type="submit" class="btn neumorphic-btn">Iniciar Sesión</button>
@@ -235,7 +320,30 @@ if ($_POST) {
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
-    integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI"
+    integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI"
     crossorigin="anonymous"></script>
+
+<script>
+// Auto-ocultar mensajes después de 5 segundos
+setTimeout(function() {
+    const alerts = document.querySelectorAll('.alert');
+    alerts.forEach(function(alert) {
+        alert.style.transition = 'opacity 0.5s ease';
+        alert.style.opacity = '0';
+        setTimeout(() => alert.remove(), 500);
+    });
+}, 5000);
+
+// Mejorar UX del formulario
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.querySelector('form');
+    const submitBtn = document.querySelector('button[type="submit"]');
+    
+    form.addEventListener('submit', function() {
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Iniciando...';
+        submitBtn.disabled = true;
+    });
+});
+</script>
 </body>
 </html>
